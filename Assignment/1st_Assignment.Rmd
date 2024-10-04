@@ -1,0 +1,809 @@
+---
+title: "First Assignement"
+author: "Davide"
+date: "2024-10-03"
+output: html_document
+---
+Commands to set the directory
+```{r}
+getwd()
+path <- "C:/Users/Davide/Desktop/Alma Mater/SECOND YEAR/GIS/Assignment"
+setwd(path)
+```
+Those are the libraries we will need to fulfill each task
+```{r}
+library(sf)
+library(spData)
+library(tidyverse) 
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(viridis)
+library(exactextractr)
+library(cowplot)
+library(ggpubr)
+library(raster)
+library(patchwork)
+library(gridExtra)
+```
+# BRAZIL *Road Infrastructure*
+
+**Paper**: Morten, M. & Oliveira, J., 2018. *The Effects of Roads on Trade and Migration: Evidence from a Planned Capital City*
+
+**Aim**: Replicate Figure 1 from the paper, which illustrates *Brazil’s capital road infrastructure*.
+
+Import data set on Brasil roads, alongside impose a simple structure to allow for reading the shape file. Since we'll also need cities in our final plot, let's import also an excel file with brazilian cities.
+```{r}
+br_roads <- "data/SNV_202001A.shp"
+sf.br_roads <- st_read(br_roads)
+br_cities <- read_excel("data/br.xlsx")
+```
+
+After eliminating not available observations
+```{r}
+br_cities <- br_cities %>%
+  filter(!is.na(lng), !is.na(lat))
+br_cities_sf <- st_as_sf(br_cities, 
+                                 coords = c("lng", "lat"), 
+                                 crs = 4326)  # WGS84 coordinate system
+
+br_cities_labels <- br_cities_sf %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  mutate(city = br_cities_sf$city)
+```
+
+plot 
+```{r}
+ggplot() +
+  # Plot the federal highways, coloring by sg_tipo_tr
+  geom_sf(data = sf.br_roads, aes(color = leg_multim), size = 0.5) +  
+  
+  # Plot city locations as red points
+  geom_sf(data = br_cities_sf, shape = 21, fill = "black", color = "black", size = 0.5) +  # Cities in red
+  
+  # Add city names as text labels using the coordinates data frame
+  geom_text(data = br_cities_labels, aes(x = X, y = Y, label = city),
+            nudge_y = 0.1, color = "black", size = 3.5, check_overlap = TRUE) +  # Adjust nudge_y for better placement
+  
+  # Add titles and captions
+  labs(title = "Federal Highways and Cities in Brazil",
+       caption = "Brasil") +
+  
+  # Customize the theme for better appearance
+  theme_minimal() +
+  theme(legend.position = "right", 
+        plot.caption = element_text(hjust = 0.5, size = 10),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) 
+
+```
+
+Clean the enviorment for the next Assignment
+```{r}
+rm(list=ls())
+```
+
+# BRAZIL *meso-regions population density*
+
+**Paper**: Pellegrina, H.S. and Sotelo, S., 2021. *Migration, Specialization, and Trade: Evidence from Brazil’s*
+*March to the West*
+
+**Aim**: Replicate Figure 2 from the paper, which illustrates *Population in Brazil’s meso-regions (or districts) in different periods*
+
+Import data set on Brasil roads and population. Recall to turn into sf the shape file. 
+*Attention*:The original Excel file did have formatting issues, such as empty cells in the first row, which could affected the import process. Due to this issues some adjustment to the original dataset is been performed
+```{r}
+br_mesoregiones <-"data/BR_Mesorregioes_2021.shp"
+sf.br_mesoregiones <- st_read(br_mesoregiones)
+pop_mesoregiones <- read_excel("data/BrazilPopulation.xlsx")
+```
+Before plotting the whole density we need to identify Western regions and aggregate them togheter using the function st_union(). One way is to create manually a new variable to differenciate West and East. To do that we have visualized the location of each region SIGLA in a plot using ggplot. 
+```{r}
+West <- c("AC", "AM", "AP", "GO", "MA", "MT", "MS", "PA", "TO","RO", "RR")
+East <- c("AL", "BA", "CE", "DF", "ES", "MG", "PB", "PE", "PI", "PR", "RJ", "RN", "RS", "SC", "SE", "SP")
+
+sf.br_mesoregiones <- sf.br_mesoregiones %>%
+  mutate(regiones = case_when(
+    SIGLA %in% West ~ "West",
+    SIGLA %in% East ~ "East",
+    TRUE ~ "Altro"
+  ))
+
+west_regions <- sf.br_mesoregiones[sf.br_mesoregiones$regiones == "West", ]
+west_union <- st_union(west_regions) # it is a Multipolygon but we need to turn it in a simple feature
+west_union_sf <- st_sf(geometry = st_union(west_union))
+```
+
+We can finally plot the Figure showing the density having the main focus on the western regions
+```{r}
+ggplot() +
+  geom_sf(data = sf.br_mesoregiones, aes(colour = NA)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red") +  
+  theme_minimal() +
+  labs(color = "Western meso-regiones' population density") 
+```
+Merge the 2 datasets
+```{r}
+
+Brazil <- sf.br_mesoregiones %>% 
+  left_join(pop_mesoregiones,by = c("NM_MESO" =  "Brasil, Grande Região, Unidade da Federação e Mesorregião Geográfica"))
+```
+
+Let's try to create three plots on the evolution of brazil's population density in 30-years period.
+convert in factor years and compute the density for each year. Sinice in every year observations on popiulation is missing forn Lago mirim and Lago dos patos, we can exclude them from the dataset
+```{r}
+# Rimuovi le osservazioni con NA nella colonna "1991"
+Brazil <- Brazil %>%
+  filter(!is.na(`1991`))  # Usa backticks se il nome della colonna contiene numeri
+```
+
+calcoliamo la densità di popolazione del brasile dopo aver convertito in numeriche le variabili di interesse
+```{r}
+# Assicurati che 1991/2000/2010 siano numeriche
+Brazil$`1991` <- as.numeric(as.character(Brazil$`1991`))  # Conversione in numerico se necessario
+Brazil$`2000` <- as.numeric(as.character(Brazil$`2000`))  # Conversione in numerico se necessario
+Brazil$`2010` <- as.numeric(as.character(Brazil$`2010`))  # Conversione in numerico se necessario
+```
+
+```{r}
+pop_sum_1991 <- sum(Brazil$`1991`, na.rm = TRUE)  # Somma per 1991
+pop_sum_2000 <- sum(Brazil$`2000`, na.rm = TRUE)  # Somma per 1991
+pop_sum_2010 <- sum(Brazil$`2010`, na.rm = TRUE)  # Somma per 1991
+```
+
+create a new variable with density
+```{r}
+Brazil <- Brazil %>%
+  mutate(
+    density_1991 = `1991` / pop_sum_1991,  
+    density_2000 = `2000` / pop_sum_2000,
+    density_2010 = `2010` / pop_sum_2010
+  )
+```
+
+
+```{r}
+# Definisci il range e i colori
+min_val <- 0   # valore minimo
+max_val <- 0.1  # valore massimo
+colors <- c("blue", "green", "yellow", "red")  # Colori da utilizzare
+
+# Crea il grafico
+ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_1991)) +  # Assicurati di usare la variabile numerica
+  geom_sf(data = west_union_sf, fill = NA, color = "red") +  
+  scale_fill_gradientn(colors = colors, limits = c(min_val, max_val), na.value = "grey50") +  # Imposta il gradiente e i limiti
+  theme_minimal() +
+  labs(title = "Population Density by Meso-regions in 1991", fill = "Population Density")
+
+
+```
+altra prova
+```{r}
+# Crea categorie basate sui valori di densità
+Brazil <- Brazil %>%
+  mutate(density_category_1991 = cut(density_1991, 
+                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 labels = c("Very Low", "Low", "Medium", "High", "Very High"),
+                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+
+# Crea categorie basate sui valori di densità
+Brazil <- Brazil %>%
+  mutate(density_category_2000 = cut(density_2000, 
+                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 labels = c("Very Low", "Low", "Medium", "High", "Very High"),
+                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+
+# Crea categorie basate sui valori di densità
+Brazil <- Brazil %>%
+  mutate(density_category_2010 = cut(density_2010, 
+                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 labels = c("Very Low", "Low", "Medium", "High", "Very High"),
+                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+
+# Colori corrispondenti per ogni categoria
+colors <- c("Very Low" = "#f0f8ff",  # Azzurro chiarissimo
+            "Low" = "#87ceeb",      # Azzurro chiaro
+            "Medium" = "#4682b4",   # Azzurro medio
+            "High" = "blue",     # Azzurro scuro
+            "Very High" = "navy") # Blu royal
+```
+
+creiamo un grafico per ogni anno di interesse
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Primo grafico per il 1991
+plot_1991 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_1991)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  labs(title = "Population Density by Meso-regions in 1991", fill = "Density Category") +
+  theme(legend.text = element_text(size = 2), 
+        legend.title = element_text(size = 3),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
+        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
+
+# Secondo grafico per il 2000
+plot_2000 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_2000)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  labs(title = "Population Density by Meso-regions in 2000", fill = "Density Category") +
+  theme(legend.text = element_text(size = 2), 
+        legend.title = element_text(size = 3),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
+        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
+
+# Terzo grafico per il 2010
+plot_2010 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_2010)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  labs(title = "Population Density by Meso-regions in 2010", fill = "Density Category") +
+  theme(legend.text = element_text(size = 2), 
+        legend.title = element_text(size = 3),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
+        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
+
+# Combinazione dei grafici
+combined_plot <- plot_1991 + plot_2000 + plot_2010 + 
+  plot_layout(ncol = 3)
+
+# Mostra il grafico combinato
+print(combined_plot)
+
+```
+tentiamo 
+```{r}
+legend_title <- "pop.share"
+
+# Primo grafico per il 1991
+plot_1991 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_1991)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  theme(legend.text = element_text(size = 6), 
+        legend.title = element_text(size = 8),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
+        legend.justification = c(0, 0),  # Justificazione della leggenda
+        axis.title = element_blank(),  
+        axis.text = element_blank(),    
+        axis.ticks = element_blank()) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  ggtitle("1991") + theme(plot.title = element_text(hjust = 0.5))
+
+# Secondo grafico per il 2000
+plot_2000 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_2000)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  theme(legend.text = element_text(size = 6), 
+        legend.title = element_text(size = 8),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
+        legend.justification = c(0, 0),  # Justificazione della leggenda
+        axis.title = element_blank(),  
+        axis.text = element_blank(),    
+        axis.ticks = element_blank()) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  ggtitle("2000") + theme(plot.title = element_text(hjust = 0.5))
+
+# Terzo grafico per il 2010
+plot_2010 <- ggplot() +
+  geom_sf(data = Brazil, aes(fill = density_category_2010)) +
+  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  theme(legend.text = element_text(size = 6), 
+        legend.title = element_text(size = 8),
+        panel.grid = element_blank(),
+        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
+        legend.justification = c(0, 0),  # Justificazione della leggenda
+        axis.title = element_blank(),  
+        axis.text = element_blank(),    
+        axis.ticks = element_blank()) +
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  ggtitle("2010") + theme(plot.title = element_text(hjust = 0.5))
+
+# Combinazione dei grafici
+combined_plot <- plot_1991 + plot_2000 + plot_2010 + plot_layout(ncol = 3)
+
+# Aggiungi un titolo unico per tutti i grafici, posizionandolo sopra
+final_plot <- combined_plot + 
+  plot_annotation(title = "The Spatial Distribution of the Brazilian Population between 1950 and 2010", 
+                  theme = theme(plot.title = element_text(size = 13, hjust = 0.5)))
+
+# Mostra il grafico finale
+print(final_plot)
+```
+plot finale
+```{r}
+# Aggiungi un titolo unico per tutti i grafici, posizionandolo sopra
+final_plot <- combined_plot + 
+  plot_annotation(title = "The Spatial Distribution of the Brazilian Population between 1950 and 2010", 
+                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
+
+# Mostra il grafico finale
+print(final_plot)
+```
+
+
+
+Clean the enviorment for the execution of the next task
+```{r}
+rm(list=ls())
+```
+
+# SOUTH AFRICA
+
+**Paper**: Mettetal, E., 2019. *Irrigation dams, water and infant mortality: Evidence from South Africa*
+
+**Aim**: Replicate Figure 2 from the paper, which illustrates *hydro dams in South Africa*
+
+Load datasets
+```{r}
+dams.shp <- "data/mygeodata_merged.shp"
+sf.dams <- st_read(dams.shp)
+```
+
+SouthAfrica.shp <- "LocalMunicipalities2018_Final.shp"
+sf.SouthAfrica <- st_read(SouthAfrica.shp)
+
+# Load river gradient raster
+river_gradient_raster <- raster("South_Africa_SRMT30meters.tif")
+
+# Ensure CRS alignment between shapefiles and raster
+sf.SouthAfrica <- st_transform(sf.SouthAfrica, crs(river_gradient_raster))
+
+# Add the extracted river gradient data to the shapefile
+river_gradients_by_region <- exact_extract(river_gradient_raster, sf.SouthAfrica, 'mean')
+
+# Extract average river gradient for each region
+sf.SouthAfrica$avg_river_gradient <- river_gradients_by_region
+plot(river_gradient_raster)
+plot(sf.SouthAfrica$geometry, add=TRUE)
+
+st_crs(sf.SouthAfrica) == crs(river_gradient_raster)
+
+# Check CRS of the raster
+crs(river_gradient_raster)
+
+# Check CRS of the vector data
+st_crs(sf.SouthAfrica)
+
+sf.SouthAfrica <- sf.SouthAfrica %>% filter(!is.na(avg_river_gradient))
+
+#Create the plot
+ggplot() +
+  geom_sf(data = sf.SouthAfrica, aes(fill = avg_river_gradient) ) +
+  geom_sf(data = sf.dams, size = 0.2, color = "black") +
+  scale_fill_viridis_c(option = "C", name = "Avg River Gradient") +
+  #scale_fill_gradient(low = "grey", high = "black", name = "Avg River Gradient") +
+  theme_minimal() +
+  labs(title = "Average River Gradient by Region in South Africa")
+
+#More plot
+ggplot() +
+  geom_sf(data = sf.SouthAfrica)
+
+ggplot() +
+  geom_sf(data = sf.SouthAfrica, alpha = 0.5) +
+  geom_sf(data = sf.dams, size = 0.1) +
+  theme_minimal()
+  
+ggplot() +
+  geom_sf(data = sf.countries, fill = "lightgray", color = "black") +
+  theme_minimal() +
+  labs(title = "South Africa - Provincial Boundaries")
+
+# ETHIOPIA *distircts*
+
+**Paper**: Fried, S. and Lagakos, D., 2021. *Rural electrification, migration and structural transformation:*
+*Evidence from Ethiopia*
+
+**Aim**: Replicate Figure 2 from the paper, which illustrates *districts and electricity grid in Ethiopia*
+
+Import files and read them as sf
+```{r}
+Electricity.shp <- "data/Ethiopia Electricity Transmission Network.shp"
+sf.Electricity <- st_read(Electricity.shp)
+Roads.shp <- "data/Ethiopia_Roads.shp"
+sf.Roads <- st_read(Roads.shp)
+Et_cities <- read.csv("data/eth_pd_2020_1km_ASCII_XYZ.csv")
+```
+usare la funzione st_zm() del pacchetto sf in R per rimuovere la dimensione "M" o "Z" dalle geometrie. and plot sf.Roads
+```{r}
+sf.Roads_clean <- st_zm(sf.Roads)
+Et_cities_sf <- st_as_sf(Et_cities, coords = c("X", "Y"), crs = 4326) # Converti in un oggetto sf
+Et_cities_sf <- na.omit(Et_cities_sf) #to remove NA
+```
+
+Attention for Et_cities: Tipically x is long, y lat, and z density!!!
+
+After eliminating not available observations
+```{r}
+Et_cities <- Et_cities %>%
+  filter(!is.na(X), !is.na(Y))
+Et_cities_sf <- st_as_sf(Et_cities, 
+                                 coords = c("X", "Y"), 
+                                 crs = 4326)  # WGS84 coordinate system
+
+Et_cities_labels <- Et_cities_sf %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  mutate(city = Et_cities_sf$city)
+```
+
+plot 
+```{r}
+ggplot() +
+  geom_sf(data = sf.Roads_clean, aes(color = SURFTYPE), size = 1) +
+  scale_color_brewer(palette = "Set3") +
+  geom_sf(data = Et_cities_sf, aes(fill = Z)) +
+  scale_fill_viridis_c(option = "plasma")
+  labs(title = "Mappa della Densità di Popolazione e Larghezza delle Strade in Etiopia", 
+       color = "Tipo di Superficie", fill = "Valori Z") +
+  theme_minimal()
+
+```
+
+**NON RUNNATE QUESTI CODICI se tenete al vostro pc** 
+controlli
+```{r}
+sf.Roads_clean <- st_transform(sf.Roads_clean, st_crs(Et_cities_sf))
+```
+dimunuiamo la risoluzione?
+```{r}
+# Semplifica le geometrie con una tolleranza più alta (ad esempio, 0.1)
+Et_cities_simplified <- Et_cities_sf %>%
+  mutate(geometry = st_simplify(geometry, dTolerance = 104))
+
+# Visualizza le geometrie originali e semplificate colorate in base a z
+ggplot() +
+  geom_sf(data = Et_cities_simplified, aes(fill = Z), color = "black", alpha = 0.6) +  # Geometrie semplificata
+  scale_fill_viridis_c(option = "plasma") +  # Cambia la palette di colori se desiderato
+  labs(title = "Semplificazione delle geometrie con tolleranza alta",
+       subtitle = "Colorato in base alla variabile Z",
+       fill = "Densità (Z)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+```
+diminuiamo la dimensione del dataset
+```{r}
+# Dimezza il dataset selezionando casualmente 1/5 delle righe
+set.seed(123)  # Per rendere i risultati riproducibili
+Et_cities_one_fifth <- Et_cities_sf[sample(nrow(Et_cities_sf), nrow(Et_cities_sf) / 200), ]
+
+# Visualizza il risultato
+print(Et_cities_one_fifth)
+
+```
+```{r}
+# Semplifica le geometrie con una tolleranza più alta (ad esempio, 0.1)
+Et_cities_simplified_one_fifth <- Et_cities_one_fifth %>%
+  mutate(geometry = st_simplify(geometry, dTolerance = .4))
+
+# Visualizza le geometrie originali e semplificate colorate in base a z
+ggplot() +
+  geom_sf(data = Et_cities_simplified_one_fifth, aes(fill = Z), color = "black", alpha = 0.6) +  # Geometrie semplificata
+  scale_fill_viridis_c(option = "plasma") +  # Cambia la palette di colori se desiderato
+  labs(title = "Semplificazione delle geometrie con tolleranza alta",
+       subtitle = "Colorato in base alla variabile Z",
+       fill = "Densità (Z)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+```
+Clean the enviorment for the execution of the next task
+```{r}
+rm(list=ls())
+```
+
+# VIETNAM *Roads infrastruture*
+
+**Paper**: Balboni, C.A., 2019. In harm’s way? *infrastructure investments and the persistence of coastal cities*
+
+**Aim**: Replicate Figure 2 from the paper, which illustrates *Vietnam’s road infrastructure by road type*
+
+Import data set on Brasil roads
+```{r}
+Vietnam_roads <-"data/vnm_rdsl_2015_OSM.shp"
+sf.Vietnam_roads <- st_read(Vietnam_roads)
+```
+
+Aggregate road type in 5 cathegories
+```{r}
+sf.Vietnam_roads <- sf.Vietnam_roads %>%
+  mutate(road_category = case_when(
+    type %in% c("motorway", "motorway_link") ~ "Freeway",
+    type %in% c("trunk", "trunk_link") ~ "Dual carriageway",
+    type %in% c("primary", "primary_link") ~ "Major roads",
+    type %in% c("secondary", "secondary_link", "tertiary", "tertiary_link") ~ "Minor roads",
+    TRUE ~ "Other roads"
+  ))
+```
+
+For some reason the aes(size) doesn't work
+```{r}
+ggplot() +
+  geom_sf(data = sf.Vietnam_roads, aes(size = road_category, color = road_category)) +  
+  scale_size_manual(values = c("Freeway" = 3, 
+                               "Dual carriageway" = 2.5, 
+                               "Major roads" = 2, 
+                               "Minor roads" = 1.5, 
+                               "Other roads" = 1)) +  
+  scale_color_manual(values = c("Freeway" = "red", 
+                                "Dual carriageway" = "blue", 
+                                "Major roads" = "green", 
+                                "Minor roads" = "orange", 
+                                "Other roads" = "purple")) +  
+  labs(title = "Tipologie di Strade in Vietnam e Città", 
+       size = "Spessore delle Strade", 
+       color = "Categoria di Strada") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = sf.Vietnam_roads, aes(color = road_category)) +  
+  scale_color_manual(values = c("Freeway" = "red", 
+                                "Dual carriageway" = "blue", 
+                                "Major roads" = "green", 
+                                "Minor roads" = "orange", 
+                                "Other roads" = "purple")) +  
+  labs(title = "Vietnam's roads type", 
+       color = "Type") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),         # Rimuove la griglia
+    legend.position = "left",             # Sposta la leggenda sulla sinistra
+    axis.title = element_blank(),          # Rimuove i titoli degli assi
+    axis.text = element_blank(),           # Rimuove i testi degli assi
+    axis.ticks = element_blank()           # Rimuove i tick marks degli assi
+  )
+
+```
+ultima prova
+```{r}
+sf.Vietnam_roads$road_category <- as.factor(sf.Vietnam_roads$road_category)
+aes(color = road_category, size = ifelse(road_category == "Freeway", 2, 1))
+
+
+ggplot() +
+  geom_sf(data = sf.Vietnam_roads, aes(color = road_category, size = road_category)) +  
+  scale_color_manual(values = c("Freeway" = "red", 
+                                 "Dual carriageway" = "blue", 
+                                 "Major roads" = "green", 
+                                 "Minor roads" = "orange", 
+                                 "Other roads" = "purple")) +  
+  scale_size_manual(values = c("Freeway" = 10,  # Spessore per le autostrade
+                                "Dual carriageway" = 7,  # Spessore per le carreggiate
+                                "Major roads" = 4,  # Spessore per le strade principali
+                                "Minor roads" = 2,  # Spessore per le strade secondarie
+                                "Other roads" = 0.1)) +  # Spessore per le altre strade
+  labs(title = "Vietnam's roads type", 
+       color = "Type", 
+       size = "Relevance") +  # Aggiungi una legenda per la dimensione
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),         # Rimuove la griglia
+    legend.position = "left",             # Sposta la leggenda sulla sinistra
+    axis.title = element_blank(),          # Rimuove i titoli degli assi
+    axis.text = element_blank(),           # Rimuove i testi degli assi
+    axis.ticks = element_blank()           # Rimuove i tick marks degli assi
+  )
+
+```
+clean the enviorment
+```{r}
+rm(list=ls())
+```
+
+
+# OVERLAPPING *overlap between Mexico and Europe*
+
+**Aim**:  create a plot that overlays the Mexican shapefile onto the European shapefile (excluding Russia and Overseas France if necessary)
+
+import "world" dataset 
+```{r}
+world<- world
+```
+
+The data set propose a division for Frence: 'France' e 'French Southern and Antarctic Lands'. Acceding to the geom of Frence we aknowledge that French Polynesia is considered in this observation.
+```{r}
+sf.France <- world %>%
+  filter(name_long %in% 'France')
+```
+
+To exclude this overses land we implemented the following procedure: Isolate Frence, extract the list in geometry involving polygons of Polynesia and eliminate it. Could be reasable to move it toward French Southern and Antarctic Lands.
+```{r}
+France <- world[world$name_long == "France",]
+
+geom_France <- st_geometry(France)[[1]]
+geom_France <- geom_France[-1]
+
+st_geometry(France) <- st_sfc(st_multipolygon(geom_France), crs = st_crs(world))
+world[world$name_long == "France", ] <- France  # 5. Sostituisci nel dataset originale se necessario
+
+```
+
+We are now left overlapping Mexico and Europe. The first step is to select just observations we are interested to excluding Russian Federation and Polynesia from Europe.
+```{r}
+sf.EU <- world %>%
+  filter(continent == 'Europe' & name_long != 'Russian Federation')
+
+sf.Mexico <- world %>%
+  filter(name_long == 'Mexico')
+```
+
+Graph with no manual manipulations. We
+```{r}
+# Creazione del grafico
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = continent), color = "black") +
+  geom_sf(data = sf.Mexico, aes(fill = "Mexico"), color = "black", inherit.aes = FALSE) +
+  scale_fill_manual(values = c("Europe" = "blue"  , "Mexico" = "red")) + 
+  theme_minimal() +
+  labs(title = "Europe and Mexico")
+```
+other graphs
+```{r}
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.2) +
+  geom_sf(data = sf.Mexico, aes(fill = region_un), color = "black", alpha = 0.2) +
+  theme_minimal() +
+  labs(title = "Europe and Mexico", fill = "Region") +
+  theme(legend.position = "right")  # Nasconde la legenda se non necessaria
+
+```
+Verifica del CRS per sf.EU e sf.Mexico Se il CRS è mancante, assegnalo manualmente.
+Applica la traslazione al Messico per sovrapporlo all'Europa. Funzione per spostare manualmente le geometrie (traslazione). Applichiamo manualemnte uno spostamento sia verso est +120 che a nord +20
+```{r}
+st_crs(sf.EU)
+st_crs(sf.Mexico)
+
+if (is.na(st_crs(sf.EU))) {
+  st_crs(sf.EU) <- 4326
+}
+
+if (is.na(st_crs(sf.Mexico))) {
+  st_crs(sf.Mexico) <- 4326
+}
+
+sf.EU <- st_transform(sf.EU, crs = 4326)
+sf.Mexico <- st_transform(sf.Mexico, crs = 4326)
+shift_geom <- function(geom, x_shift, y_shift) {
+  st_geometry(geom) <- st_geometry(geom) + c(x_shift, y_shift)
+  return(geom)
+}
+sf.Mexico_shifted <- shift_geom(sf.Mexico, x_shift = 120, y_shift = 20)
+
+```
+
+Mexico will now be shifted. Hence, we need to append to this new geometry the correct coordinate reference system compatible with Europe.
+```{r}
+st_crs(sf.Mexico_shifted)
+if (is.na(st_crs(sf.Mexico_shifted))) {
+  st_crs(sf.Mexico_shifted) <- 4326  # Assegna WGS 84 a sf.Mexico
+}
+st_crs(sf.Mexico_shifted)
+```
+
+Now overlapping the 2 figures is possible
+```{r}
+sf.Mexico_shifted
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Europe with Mexico on Top", fill = "Region") +
+  theme(legend.position = "none")
+
+```
+
+Playing with coordinate refrence systems. comparison among different projections
+```{r}
+st_crs(sf.Mexico_shifted)<- 3857
+st_crs(sf.EU)<- 3857
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
+  theme_minimal() +
+  labs(title = "Europe with Mexico on Top", fill = "Region") +
+  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
+
+```
+SOVRAPPOSIZIONE
+```{r}
+st_crs(sf.Mexico_shifted)<- 3035
+st_crs(sf.EU)<- 3035
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
+  theme_minimal() +
+  labs(title = "Europe with Mexico on Top", fill = "Region") +
+  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
+
+```
+SOVRAPPOSIZIONE
+```{r}
+st_crs(sf.Mexico_shifted)<- 4326
+st_crs(sf.EU)<- 4326
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
+  theme_minimal() +
+  labs(title = "Europe with Mexico on Top", fill = "Region") +
+  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
+
+```
+5. Spostamento senza trasformazione
+Se i tuoi dati spaziali non sono stati trasformati correttamente in base al CRS, potresti continuare a vedere le stesse geometrie sulla mappa, ma questo non significa che siano state correttamente allineate al sistema di coordinate desiderato.
+
+3. Rappresentazione su scala globale
+Se visualizzi dati a livello globale, alcune proiezioni possono distorcere le aree, ma l'effetto potrebbe non essere evidente se le geometrie sono simili. Le proiezioni come Mercator possono distorcere le dimensioni delle terre vicine ai poli, ma non in modo tale da influenzare drasticamente aree più piccole.
+SOVRAPPOSIZIONE
+```{r}
+st_crs(sf.Mexico_shifted)<- "moll"
+st_crs(sf.EU)<- "moll"
+ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
+  theme_minimal() +
+  labs(title = "Europe with Mexico on Top", fill = "Region") +
+  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
+
+```
+
+Comparison
+```{r}
+
+st_crs(sf.Mexico_shifted) <- 4326
+st_crs(sf.EU) <- 4326
+plot_4326 <- ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(subtitle = "CRS: 4326") +
+  theme(legend.position = "none") +  # Nasconde la legenda
+  coord_sf(expand = FALSE)  # Elimina lo spazio extra
+
+st_crs(sf.Mexico_shifted) <- 3857
+st_crs(sf.EU) <- 3857
+plot_3857 <- ggplot() +
+  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +
+  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(subtitle = "CRS: 3857") +
+  theme(legend.position = "none") +  # Nasconde la legenda
+  coord_sf(expand = FALSE)  # Elimina lo spazio extra
+
+# Affiancamento dei due grafici
+combined_plot <- grid.arrange(plot_4326, plot_3857, ncol = 2)
+
+# Aggiunta del titolo generale
+final_plot <- annotate_figure(combined_plot,
+                              top = text_grob("Comparison between different projections", face = "bold", size = 14))
+
+# Visualizzazione del grafico finale
+print(final_plot)
+
+```
+
