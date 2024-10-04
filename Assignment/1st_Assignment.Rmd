@@ -25,6 +25,7 @@ library(ggpubr)
 library(patchwork)
 library(gridExtra)
 ```
+
 # BRAZIL *Road Infrastructure*
 
 **Paper**: Morten, M. & Oliveira, J., 2018. *The Effects of Roads on Trade and Migration: Evidence from a Planned Capital City*
@@ -44,32 +45,17 @@ br_cities <- br_cities %>%
   filter(!is.na(lng), !is.na(lat))
 br_cities_sf <- st_as_sf(br_cities, 
                                  coords = c("lng", "lat"), 
-                                 crs = 4326)  # WGS84 coordinate system
-
-br_cities_labels <- br_cities_sf %>%
-  st_coordinates() %>%
-  as.data.frame() %>%
-  mutate(city = br_cities_sf$city)
+                                 crs = 4326)
 ```
 
-plot 
+Plot Brazil's road infrastructure
 ```{r}
 ggplot() +
-  # Plot the federal highways, coloring by sg_tipo_tr
   geom_sf(data = sf.br_roads, aes(color = leg_multim), size = 0.5) +  
-  
-  # Plot city locations as red points
-  geom_sf(data = br_cities_sf, shape = 21, fill = "black", color = "black", size = 0.5) +  # Cities in red
-  
-  # Add city names as text labels using the coordinates data frame
+  geom_sf(data = br_cities_sf, shape = 21, fill = "black", color = "black", size = 0.5) +
   geom_text(data = br_cities_labels, aes(x = X, y = Y, label = city),
-            nudge_y = 0.1, color = "black", size = 3.5, check_overlap = TRUE) +  # Adjust nudge_y for better placement
-  
-  # Add titles and captions
-  labs(title = "Federal Highways and Cities in Brazil",
-       caption = "Brasil") +
-  
-  # Customize the theme for better appearance
+            nudge_y = 0.1, color = "black", size = 3.5, check_overlap = TRUE) +
+  labs(title = "Federal Highways and Cities in Brazil",caption = "Brasil") +
   theme_minimal() +
   theme(legend.position = "right", 
         plot.caption = element_text(hjust = 0.5, size = 10),
@@ -115,7 +101,7 @@ west_union <- st_union(west_regions) # it is a Multipolygon but we need to turn 
 west_union_sf <- st_sf(geometry = st_union(west_union))
 ```
 
-We can finally plot the Figure showing the density having the main focus on the western regions
+The main focus in the Paper is on the western meso-regions, as we plot in the following picture
 ```{r}
 ggplot() +
   geom_sf(data = sf.br_mesoregiones, aes(colour = NA)) +
@@ -123,9 +109,8 @@ ggplot() +
   theme_minimal() +
   labs(color = "Western meso-regiones' population density") 
 ```
-Merge the 2 datasets
+Sinse we do not have data on meso-regiones population density we left_join the original dataset on Brazil with a dataset that still doesn't have any info on density, but at least collects population's data.
 ```{r}
-
 Brazil <- sf.br_mesoregiones %>% 
   left_join(pop_mesoregiones,by = c("NM_MESO" =  "Brasil, Grande Região, Unidade da Federação e Mesorregião Geográfica"))
 ```
@@ -140,19 +125,19 @@ Brazil <- Brazil %>%
 
 calcoliamo la densità di popolazione del brasile dopo aver convertito in numeriche le variabili di interesse
 ```{r}
-# Assicurati che 1991/2000/2010 siano numeriche
-Brazil$`1991` <- as.numeric(as.character(Brazil$`1991`))  # Conversione in numerico se necessario
-Brazil$`2000` <- as.numeric(as.character(Brazil$`2000`))  # Conversione in numerico se necessario
-Brazil$`2010` <- as.numeric(as.character(Brazil$`2010`))  # Conversione in numerico se necessario
+Brazil$`1991` <- as.numeric(as.character(Brazil$`1991`))
+Brazil$`2000` <- as.numeric(as.character(Brazil$`2000`))  
+Brazil$`2010` <- as.numeric(as.character(Brazil$`2010`))  
 ```
 
+Total population by year
 ```{r}
-pop_sum_1991 <- sum(Brazil$`1991`, na.rm = TRUE)  # Somma per 1991
-pop_sum_2000 <- sum(Brazil$`2000`, na.rm = TRUE)  # Somma per 1991
-pop_sum_2010 <- sum(Brazil$`2010`, na.rm = TRUE)  # Somma per 1991
+pop_sum_1991 <- sum(Brazil$`1991`, na.rm = TRUE)
+pop_sum_2000 <- sum(Brazil$`2000`, na.rm = TRUE)
+pop_sum_2010 <- sum(Brazil$`2010`, na.rm = TRUE)
 ```
 
-create a new variable with density
+create a new variable with density. Compute for every region the percentage population density
 ```{r}
 Brazil <- Brazil %>%
   mutate(
@@ -162,110 +147,37 @@ Brazil <- Brazil %>%
   )
 ```
 
-
+Creiamo manualmente delle categorie basate sui valori di densità per ogni anno ed assegnamo dei colori corrispondenti per ogni categoria
 ```{r}
-# Definisci il range e i colori
-min_val <- 0   # valore minimo
-max_val <- 0.1  # valore massimo
-colors <- c("blue", "green", "yellow", "red")  # Colori da utilizzare
-
-# Crea il grafico
-ggplot() +
-  geom_sf(data = Brazil, aes(fill = density_1991)) +  # Assicurati di usare la variabile numerica
-  geom_sf(data = west_union_sf, fill = NA, color = "red") +  
-  scale_fill_gradientn(colors = colors, limits = c(min_val, max_val), na.value = "grey50") +  # Imposta il gradiente e i limiti
-  theme_minimal() +
-  labs(title = "Population Density by Meso-regions in 1991", fill = "Population Density")
-
-
-```
-altra prova
-```{r}
-# Crea categorie basate sui valori di densità
 Brazil <- Brazil %>%
   mutate(density_category_1991 = cut(density_1991, 
                                  breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
-                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+                                 right = FALSE))
 
-# Crea categorie basate sui valori di densità
+
 Brazil <- Brazil %>%
   mutate(density_category_2000 = cut(density_2000, 
                                  breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
-                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+                                 right = FALSE))
 
-# Crea categorie basate sui valori di densità
+
 Brazil <- Brazil %>%
   mutate(density_category_2010 = cut(density_2010, 
                                  breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
-                                 right = FALSE))  # Imposta right = FALSE se vuoi includere il limite inferiore
+                                 right = FALSE)) 
 
-# Colori corrispondenti per ogni categoria
+
 colors <- c("Very Low" = "#f0f8ff",  # Azzurro chiarissimo
-            "Low" = "#87ceeb",      # Azzurro chiaro
-            "Medium" = "#4682b4",   # Azzurro medio
-            "High" = "blue",     # Azzurro scuro
-            "Very High" = "navy") # Blu royal
+            "Low" = "#87ceeb",      
+            "Medium" = "#4682b4",  
+            "High" = "blue",     
+            "Very High" = "navy") # Blu scuro
 ```
 
 creiamo un grafico per ogni anno di interesse
-```{r}
-library(ggplot2)
-library(patchwork)
-
-# Primo grafico per il 1991
-plot_1991 <- ggplot() +
-  geom_sf(data = Brazil, aes(fill = density_category_1991)) +
-  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
-  scale_fill_manual(values = colors) +
-  theme_minimal() +
-  labs(title = "Population Density by Meso-regions in 1991", fill = "Density Category") +
-  theme(legend.text = element_text(size = 2), 
-        legend.title = element_text(size = 3),
-        panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
-        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
-
-# Secondo grafico per il 2000
-plot_2000 <- ggplot() +
-  geom_sf(data = Brazil, aes(fill = density_category_2000)) +
-  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
-  scale_fill_manual(values = colors) +
-  theme_minimal() +
-  labs(title = "Population Density by Meso-regions in 2000", fill = "Density Category") +
-  theme(legend.text = element_text(size = 2), 
-        legend.title = element_text(size = 3),
-        panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
-        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
-
-# Terzo grafico per il 2010
-plot_2010 <- ggplot() +
-  geom_sf(data = Brazil, aes(fill = density_category_2010)) +
-  geom_sf(data = west_union_sf, fill = NA, color = "red", size = 0.5) +
-  scale_fill_manual(values = colors) +
-  theme_minimal() +
-  labs(title = "Population Density by Meso-regions in 2010", fill = "Density Category") +
-  theme(legend.text = element_text(size = 2), 
-        legend.title = element_text(size = 3),
-        panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Posiziona la leggenda in basso a sinistra
-        legend.justification = c(0, 0)) +  # Giustifica il posizionamento
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))  # Riduce le dimensioni dei quadratini
-
-# Combinazione dei grafici
-combined_plot <- plot_1991 + plot_2000 + plot_2010 + 
-  plot_layout(ncol = 3)
-
-# Mostra il grafico combinato
-print(combined_plot)
-
-```
-tentiamo 
 ```{r}
 legend_title <- "pop.share"
 
@@ -278,12 +190,12 @@ plot_1991 <- ggplot() +
   theme(legend.text = element_text(size = 6), 
         legend.title = element_text(size = 8),
         panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
-        legend.justification = c(0, 0),  # Justificazione della leggenda
+        legend.position = c(0, 0),
+        legend.justification = c(0, 0), 
         axis.title = element_blank(),  
         axis.text = element_blank(),    
         axis.ticks = element_blank()) +
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) + 
   ggtitle("1991") + theme(plot.title = element_text(hjust = 0.5))
 
 # Secondo grafico per il 2000
@@ -295,12 +207,12 @@ plot_2000 <- ggplot() +
   theme(legend.text = element_text(size = 6), 
         legend.title = element_text(size = 8),
         panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
-        legend.justification = c(0, 0),  # Justificazione della leggenda
+        legend.position = c(0, 0),
+        legend.justification = c(0, 0),
         axis.title = element_blank(),  
         axis.text = element_blank(),    
         axis.ticks = element_blank()) +
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) + 
   ggtitle("2000") + theme(plot.title = element_text(hjust = 0.5))
 
 # Terzo grafico per il 2010
@@ -312,37 +224,24 @@ plot_2010 <- ggplot() +
   theme(legend.text = element_text(size = 6), 
         legend.title = element_text(size = 8),
         panel.grid = element_blank(),
-        legend.position = c(0, 0),  # Sposta la leggenda in basso a destra
-        legend.justification = c(0, 0),  # Justificazione della leggenda
+        legend.position = c(0, 0),
+        legend.justification = c(0, 0),
         axis.title = element_blank(),  
         axis.text = element_blank(),    
         axis.ticks = element_blank()) +
-  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) +  # Riduci le dimensioni dei quadratini
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5,title = legend_title)) + 
   ggtitle("2010") + theme(plot.title = element_text(hjust = 0.5))
 
 # Combinazione dei grafici
 combined_plot <- plot_1991 + plot_2000 + plot_2010 + plot_layout(ncol = 3)
 
-# Aggiungi un titolo unico per tutti i grafici, posizionandolo sopra
+# Titolo unico
 final_plot <- combined_plot + 
   plot_annotation(title = "The Spatial Distribution of the Brazilian Population between 1950 and 2010", 
                   theme = theme(plot.title = element_text(size = 13, hjust = 0.5)))
 
-# Mostra il grafico finale
 print(final_plot)
 ```
-plot finale
-```{r}
-# Aggiungi un titolo unico per tutti i grafici, posizionandolo sopra
-final_plot <- combined_plot + 
-  plot_annotation(title = "The Spatial Distribution of the Brazilian Population between 1950 and 2010", 
-                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
-
-# Mostra il grafico finale
-print(final_plot)
-```
-
-
 
 Clean the enviorment for the execution of the next task
 ```{r}
@@ -465,7 +364,7 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *Vietnam’s road infrastructure by road type*
 
-Import data set on Brasil roads
+Import data set on Vietam's roads
 ```{r}
 Vietnam_roads <-"data/vnm_rdsl_2015_OSM.shp"
 sf.Vietnam_roads <- st_read(Vietnam_roads)
@@ -716,7 +615,7 @@ ggplot() +
 
 ```
 
-Comparison
+FINAL COMPARISO: SCEGLIETE VOI QUALI VOLETE TENERE E PROVATE ALTRE PROJECTIONS
 ```{r}
 
 st_crs(sf.Mexico_shifted) <- 4326
