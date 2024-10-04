@@ -22,7 +22,6 @@ library(viridis)
 library(exactextractr)
 library(cowplot)
 library(ggpubr)
-library(raster)
 library(patchwork)
 library(gridExtra)
 ```
@@ -356,61 +355,6 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *hydro dams in South Africa*
 
-Load datasets
-```{r}
-dams.shp <- "data/mygeodata_merged.shp"
-sf.dams <- st_read(dams.shp)
-```
-
-SouthAfrica.shp <- "LocalMunicipalities2018_Final.shp"
-sf.SouthAfrica <- st_read(SouthAfrica.shp)
-
-# Load river gradient raster
-river_gradient_raster <- raster("South_Africa_SRMT30meters.tif")
-
-# Ensure CRS alignment between shapefiles and raster
-sf.SouthAfrica <- st_transform(sf.SouthAfrica, crs(river_gradient_raster))
-
-# Add the extracted river gradient data to the shapefile
-river_gradients_by_region <- exact_extract(river_gradient_raster, sf.SouthAfrica, 'mean')
-
-# Extract average river gradient for each region
-sf.SouthAfrica$avg_river_gradient <- river_gradients_by_region
-plot(river_gradient_raster)
-plot(sf.SouthAfrica$geometry, add=TRUE)
-
-st_crs(sf.SouthAfrica) == crs(river_gradient_raster)
-
-# Check CRS of the raster
-crs(river_gradient_raster)
-
-# Check CRS of the vector data
-st_crs(sf.SouthAfrica)
-
-sf.SouthAfrica <- sf.SouthAfrica %>% filter(!is.na(avg_river_gradient))
-
-#Create the plot
-ggplot() +
-  geom_sf(data = sf.SouthAfrica, aes(fill = avg_river_gradient) ) +
-  geom_sf(data = sf.dams, size = 0.2, color = "black") +
-  scale_fill_viridis_c(option = "C", name = "Avg River Gradient") +
-  #scale_fill_gradient(low = "grey", high = "black", name = "Avg River Gradient") +
-  theme_minimal() +
-  labs(title = "Average River Gradient by Region in South Africa")
-
-#More plot
-ggplot() +
-  geom_sf(data = sf.SouthAfrica)
-
-ggplot() +
-  geom_sf(data = sf.SouthAfrica, alpha = 0.5) +
-  geom_sf(data = sf.dams, size = 0.1) +
-  theme_minimal()
-  
-ggplot() +
-  geom_sf(data = sf.countries, fill = "lightgray", color = "black") +
-  theme_minimal() +
-  labs(title = "South Africa - Provincial Boundaries")
 
 # ETHIOPIA *distircts*
 
