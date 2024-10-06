@@ -46,6 +46,10 @@ br_cities <- br_cities %>%
 br_cities_sf <- st_as_sf(br_cities, 
                                  coords = c("lng", "lat"), 
                                  crs = 4326)
+br_cities_labels <- br_cities_sf %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  mutate(city = br_cities_sf$city)
 ```
 
 Plot Brazil's road infrastructure
