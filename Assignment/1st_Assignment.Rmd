@@ -1,8 +1,24 @@
 ---
 title: "First Assignement"
-author: "Davide"
+author: "Davide Delfino, Elena Mannino, Sara Tozzi, Marco"
 date: "2024-10-03"
-output: html_document
+output:
+  pdf_document:
+    toc: yes
+    latex_engine: xelatex
+  html_notebook:
+    number_sections: yes
+    toc: yes
+  html_document:
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+header-includes:
+  - \usepackage{fontspec}
+  - \setmainfont{Calibri Light}
+subtitle: 
+editor_options:
+  chunk_output_type: inline
 ---
 Commands to set the directory
 ```{r}
@@ -127,49 +143,50 @@ Brazil <- Brazil %>%
   filter(!is.na(`1991`))  # Usa backticks se il nome della colonna contiene numeri
 ```
 
-calcoliamo la densità di popolazione del brasile dopo aver convertito in numeriche le variabili di interesse
+calcoliamo la "densità di popolazione" del brasile dopo aver convertito in numeriche le variabili di interesse
 ```{r}
 Brazil$`1991` <- as.numeric(as.character(Brazil$`1991`))
 Brazil$`2000` <- as.numeric(as.character(Brazil$`2000`))  
 Brazil$`2010` <- as.numeric(as.character(Brazil$`2010`))  
 ```
 
-Total population by year
+Total population by year of each meso region over the mean 
 ```{r}
-pop_sum_1991 <- sum(Brazil$`1991`, na.rm = TRUE)
-pop_sum_2000 <- sum(Brazil$`2000`, na.rm = TRUE)
-pop_sum_2010 <- sum(Brazil$`2010`, na.rm = TRUE)
+pop_mean_1991 <- mean(Brazil$`1991`, na.rm = TRUE)
+pop_mean_2000 <- mean(Brazil$`2000`, na.rm = TRUE)
+pop_mean_2010 <- mean(Brazil$`2010`, na.rm = TRUE)
 ```
 
 create a new variable with density. Compute for every region the percentage population density
 ```{r}
 Brazil <- Brazil %>%
   mutate(
-    density_1991 = `1991` / pop_sum_1991,  
-    density_2000 = `2000` / pop_sum_2000,
-    density_2010 = `2010` / pop_sum_2010
+    density_1991 = `1991` / pop_mean_1991,  
+    density_2000 = `2000` / pop_mean_2000,
+    density_2010 = `2010` / pop_mean_2010
   )
 ```
-
+-4 meso-regiones:  hanno una popolazione superiore a 4 volte la media
+-5 mesoregiones: hanno una popolazione superiore a 2 volte la media
 Creiamo manualmente delle categorie basate sui valori di densità per ogni anno ed assegnamo dei colori corrispondenti per ogni categoria
 ```{r}
 Brazil <- Brazil %>%
   mutate(density_category_1991 = cut(density_1991, 
-                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 breaks = c(-Inf, 0.5, 1, 2, 4, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
                                  right = FALSE))
 
 
 Brazil <- Brazil %>%
   mutate(density_category_2000 = cut(density_2000, 
-                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 breaks = c(-Inf, 0.5, 1, 2, 4, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
                                  right = FALSE))
 
 
 Brazil <- Brazil %>%
   mutate(density_category_2010 = cut(density_2010, 
-                                 breaks = c(-Inf, 0.005, 0.01, 0.02, 0.05, Inf), 
+                                 breaks = c(-Inf, 0.5, 1, 2, 4, Inf), 
                                  labels = c("Very Low", "Low", "Medium", "High", "Very High"),
                                  right = FALSE)) 
 
@@ -181,7 +198,7 @@ colors <- c("Very Low" = "#f0f8ff",  # Azzurro chiarissimo
             "Very High" = "navy") # Blu scuro
 ```
 
-creiamo un grafico per ogni anno di interesse
+creiamo un grafico per ogni anno di interesse( sono diversi da quelli del paper per via di dataset differneti)
 ```{r}
 legend_title <- "pop.share"
 
@@ -266,96 +283,74 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *districts and electricity grid in Ethiopia*
 
-Import files and read them as sf
+Dataset we'll need:
 ```{r}
-Electricity.shp <- "data/Ethiopia Electricity Transmission Network.shp"
-sf.Electricity <- st_read(Electricity.shp)
-Roads.shp <- "data/Ethiopia_Roads.shp"
-sf.Roads <- st_read(Roads.shp)
-Et_cities <- read.csv("data/eth_pd_2020_1km_ASCII_XYZ.csv")
-```
-usare la funzione st_zm() del pacchetto sf in R per rimuovere la dimensione "M" o "Z" dalle geometrie. and plot sf.Roads
-```{r}
-sf.Roads_clean <- st_zm(sf.Roads)
-Et_cities_sf <- st_as_sf(Et_cities, coords = c("X", "Y"), crs = 4326) # Converti in un oggetto sf
-Et_cities_sf <- na.omit(Et_cities_sf) #to remove NA
-```
+#data that ontains data for the major roads of Ethiopia
+shproads<-"data/Ethiopia_Roads.shp"
+sf.roads<-st_read(shproads)
 
-Attention for Et_cities: Tipically x is long, y lat, and z density!!!
+#data thatcontains the spatial data for Electricity grids across the African continent
+shppwr<-"data/africa_grid_20170906final.shp"
+sf.power<-st_read(shppwr)
 
-After eliminating not available observations
-```{r}
-Et_cities <- Et_cities %>%
-  filter(!is.na(X), !is.na(Y))
-Et_cities_sf <- st_as_sf(Et_cities, 
-                                 coords = c("X", "Y"), 
-                                 crs = 4326)  # WGS84 coordinate system
+#power plant data
+plantsafr2<-read_excel("data/RePP_Petersetal.xlsx", sheet= "S3 HPPD", skip=2)
 
-Et_cities_labels <- Et_cities_sf %>%
-  st_coordinates() %>%
-  as.data.frame() %>%
-  mutate(city = Et_cities_sf$city)
+
+#population density data
+shp3<-"data/eth_weredas.shp"
+podens_district<-st_read(shp3)
 ```
 
-plot 
+Filter the data to focus only on Ethiopian datas
+```{r}
+sf.pwret<-sf.power %>%
+  filter(country=="Ethiopia")
+plantseth<-plantsafr2 %>%
+  filter(country=='Ethiopia')
+```
+
+usare la funzione st_zm() del pacchetto sf in R per rimuovere la dimensione "Z(density)" dalle geometrie.
+```{r}
+# remove height (or depth) coordinates from a spatial object
+sf.roads <- st_zm(sf.roads)
+sf.pwret <- st_zm(sf.pwret)
+```
+
+do a log transformation of the population density data to allow for a better visualization.
+```{r}
+podens_district$log_POP_DENS <- log1p(podens_district$POP_DENS)
+```
+
+Assign a CRS (Coordinate Reference System) to the population density to insure compatibility between datasets. Therefore, we assigned the CRS corresponding to Ethiopia to ensure compatibility with the other components of the graph. Similarly, it is necessary to transform the power plant dataframe into an sf object and then set the appropriate CRS.
+
+```{r}
+podens_district <- st_set_crs(podens_district, 32637) # Replace with the appropriate EPSG code
+plantseth_sf <- st_as_sf(plantseth, coords = c("lon", "lat"), crs = 4326)  # Set to WGS 84 (EPSG:4326)
+plantseth_sf <- st_transform(plantseth_sf, 32637)  
+st_crs(plantseth_sf)
+```
+
+Plot the graph.
+
+In the graph, the yellow point represents the Ethiopian power plants, the red lines indicate the high-voltage grid, and the black lines depict the major roads of Ethiopia.
+
 ```{r}
 ggplot() +
-  geom_sf(data = sf.Roads_clean, aes(color = SURFTYPE), size = 1) +
-  scale_color_brewer(palette = "Set3") +
-  geom_sf(data = Et_cities_sf, aes(fill = Z)) +
-  scale_fill_viridis_c(option = "plasma")
-  labs(title = "Mappa della Densità di Popolazione e Larghezza delle Strade in Etiopia", 
-       color = "Tipo di Superficie", fill = "Valori Z") +
-  theme_minimal()
-
-```
-
-**NON RUNNATE QUESTI CODICI se tenete al vostro pc** 
-controlli
-```{r}
-sf.Roads_clean <- st_transform(sf.Roads_clean, st_crs(Et_cities_sf))
-```
-dimunuiamo la risoluzione?
-```{r}
-# Semplifica le geometrie con una tolleranza più alta (ad esempio, 0.1)
-Et_cities_simplified <- Et_cities_sf %>%
-  mutate(geometry = st_simplify(geometry, dTolerance = 104))
-
-# Visualizza le geometrie originali e semplificate colorate in base a z
-ggplot() +
-  geom_sf(data = Et_cities_simplified, aes(fill = Z), color = "black", alpha = 0.6) +  # Geometrie semplificata
-  scale_fill_viridis_c(option = "plasma") +  # Cambia la palette di colori se desiderato
-  labs(title = "Semplificazione delle geometrie con tolleranza alta",
-       subtitle = "Colorato in base alla variabile Z",
-       fill = "Densità (Z)") +
+  geom_sf(data = podens_district, aes(fill = log_POP_DENS)) +  # Fill based on log_POP_DENS
+  scale_fill_gradientn(colors = c("lightyellow", "lightblue", "blue", "darkblue"), 
+                       name = "Log of Population Density") +  
+  geom_sf(data = sf.roads, color = "black", size = 20) +  # Adjust the size for roads
+  geom_sf(data = sf.pwret, color = "red", size = 15) +  # Power plants in red
+  geom_sf(data = plantseth_sf, color = 'yellow', size = 2) +   # Set point size for visibility
+  labs(
+    title = "Ethiopian Population Density and The Electric Grid", 
+  ) +
   theme_minimal() +
-  theme(legend.position = "right")
-
-```
-diminuiamo la dimensione del dataset
-```{r}
-# Dimezza il dataset selezionando casualmente 1/5 delle righe
-set.seed(123)  # Per rendere i risultati riproducibili
-Et_cities_one_fifth <- Et_cities_sf[sample(nrow(Et_cities_sf), nrow(Et_cities_sf) / 200), ]
-
-# Visualizza il risultato
-print(Et_cities_one_fifth)
-
-```
-```{r}
-# Semplifica le geometrie con una tolleranza più alta (ad esempio, 0.1)
-Et_cities_simplified_one_fifth <- Et_cities_one_fifth %>%
-  mutate(geometry = st_simplify(geometry, dTolerance = .4))
-
-# Visualizza le geometrie originali e semplificate colorate in base a z
-ggplot() +
-  geom_sf(data = Et_cities_simplified_one_fifth, aes(fill = Z), color = "black", alpha = 0.6) +  # Geometrie semplificata
-  scale_fill_viridis_c(option = "plasma") +  # Cambia la palette di colori se desiderato
-  labs(title = "Semplificazione delle geometrie con tolleranza alta",
-       subtitle = "Colorato in base alla variabile Z",
-       fill = "Densità (Z)") +
-  theme_minimal() +
-  theme(legend.position = "right")
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 10))
 ```
 Clean the enviorment for the execution of the next task
 ```{r}
@@ -427,7 +422,7 @@ ggplot() +
   )
 
 ```
-ultima prova
+ultima prova ma la size non funziona 
 ```{r}
 sf.Vietnam_roads$road_category <- as.factor(sf.Vietnam_roads$road_category)
 aes(color = road_category, size = ifelse(road_category == "Freeway", 2, 1))
@@ -606,20 +601,8 @@ Se i tuoi dati spaziali non sono stati trasformati correttamente in base al CRS,
 
 3. Rappresentazione su scala globale
 Se visualizzi dati a livello globale, alcune proiezioni possono distorcere le aree, ma l'effetto potrebbe non essere evidente se le geometrie sono simili. Le proiezioni come Mercator possono distorcere le dimensioni delle terre vicine ai poli, ma non in modo tale da influenzare drasticamente aree più piccole.
-SOVRAPPOSIZIONE
-```{r}
-st_crs(sf.Mexico_shifted)<- "moll"
-st_crs(sf.EU)<- "moll"
-ggplot() +
-  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
-  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
-  theme_minimal() +
-  labs(title = "Europe with Mexico on Top", fill = "Region") +
-  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
 
-```
-
-FINAL COMPARISO: SCEGLIETE VOI QUALI VOLETE TENERE E PROVATE ALTRE PROJECTIONS
+FINAL COMPARISON SCEGLIETE VOI QUALI VOLETE TENERE E PROVATE ALTRE PROJECTIONS
 ```{r}
 
 st_crs(sf.Mexico_shifted) <- 4326
