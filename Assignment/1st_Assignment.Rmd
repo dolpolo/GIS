@@ -275,6 +275,108 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *hydro dams in South Africa*
 
+Load datasets
+```{r}
+dams.shp <- "data/mygeodata_merged.shp"
+sf.dams <- st_read(dams.shp)
+
+SouthAfrica.shp <- "data/LocalMunicipalities2018_Final.shp"
+sf.SouthAfrica <- st_read(SouthAfrica.shp)
+```
+
+
+Load river gradient raster
+```{r}
+#install.packages(c("raster", "sf", "exactextractr"))
+library(raster)
+```
+
+```{r}
+river_gradient_raster <- raster("data/South_Africa_SRMT30meters.tif")
+```
+
+Ensure CRS alignment between shapefiles and raster
+```{r}
+sf.SouthAfrica <- st_transform(sf.SouthAfrica, crs(river_gradient_raster))
+
+```
+
+Add the extracted river gradient data to the shapefile
+```{r}
+river_gradients_by_region <- exact_extract(river_gradient_raster, sf.SouthAfrica, 'mean')
+
+```
+
+Extract average river gradient for each region
+```{r}
+sf.SouthAfrica$avg_river_gradient <- river_gradients_by_region
+st_crs(sf.SouthAfrica) == crs(river_gradient_raster)
+plot(river_gradient_raster)
+plot(sf.SouthAfrica$geometry, add=TRUE)
+```
+
+
+Check CRS of the raster (optional)
+```{r}
+crs(river_gradient_raster)
+
+```
+
+Check CRS of the vector data (optional)
+```{r}
+st_crs(sf.SouthAfrica)
+
+```
+
+Remove NA
+```{r}
+sf.SouthAfrica <- sf.SouthAfrica %>% filter(!is.na(avg_river_gradient))
+
+```
+
+Classify the average river gradient into 6 intervals
+```{r}
+sf.SouthAfrica <- sf.SouthAfrica %>%
+  mutate(gradient_class = cut(avg_river_gradient, 
+                              breaks = 6, 
+                              labels = c("0.0000 - 2.229103", 
+                                         "2.229103 - 3.821713", 
+                                         "3.821713 - 6.593167", 
+                                         "6.593167 - 9.879707", 
+                                         "9.879707 - 13.130823", 
+                                         "13.130823 - 19.829017"),
+                              include.lowest = TRUE))
+
+```
+
+Create the plot
+```{r}
+ggplot() +
+  geom_sf(data = sf.SouthAfrica, aes(fill = gradient_class), color = "white") + 
+  geom_sf(data = sf.dams, size = 0.2, color = "black") +
+  scale_fill_manual(values = c("lightgrey", "#d9d9d9", "#bdbdbd", "#969696", "#636363", "#4d4d4d"),
+                    name = "Avg River Gradient") + 
+  theme_minimal() +
+  labs(title = "Average River Gradient by Region in South Africa",
+       fill = "Avg River Gradient") +
+  theme(
+    legend.position = c(0, 1),
+    legend.justification = c(0, 1), 
+    legend.direction = "vertical",
+    legend.key.size = unit(0.5, "cm"), # Make the legend keys smaller
+    legend.text = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+```
+We get a slightly different plot with respect to the figure we want to replicate. 
+Differences are due to the datasets. We did not find the same District boundaries
+and this probably caused the average river gradient to be computed over different 
+regions in terms of dimension.
+
 
 # ETHIOPIA *distircts*
 
