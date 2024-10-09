@@ -40,6 +40,24 @@ library(cowplot)
 library(ggpubr)
 library(patchwork)
 library(gridExtra)
+library(s2)
+library(ggmap)
+library(broom)
+library(rmapshaper)
+library(ggrepel)
+library("RColorBrewer")
+library(parallel)
+library(conflicted)
+library(validate)
+library(assertr)
+library(fixest)
+library(feather)
+library(haven)
+library(gmapsdistance)
+library(units)
+library(ggpubr)
+library(elevatr)
+conflicts_prefer(dplyr::filter) #to avoid any kind of conflict error
 ```
 
 # BRAZIL *Road Infrastructure*
@@ -48,44 +66,55 @@ library(gridExtra)
 
 **Aim**: Replicate Figure 1 from the paper, which illustrates *Brazil’s capital road infrastructure*.
 
-Import data set on Brasil roads, alongside impose a simple structure to allow for reading the shape file. Since we'll also need cities in our final plot, let's import also an excel file with brazilian cities.
 ```{r}
-br_roads <- "data/SNV_202001A.shp"
-sf.br_roads <- st_read(br_roads)
-br_cities <- read_excel("data/br.xlsx")
+secdata <- file.path(path,"data","Brazil")
 ```
 
-After eliminating not available observations
+Import dataset on Brasil states and highways
 ```{r}
-br_cities <- br_cities %>%
-  filter(!is.na(lng), !is.na(lat))
-br_cities_sf <- st_as_sf(br_cities, 
-                                 coords = c("lng", "lat"), 
-                                 crs = 4326)
-br_cities_labels <- br_cities_sf %>%
-  st_coordinates() %>%
-  as.data.frame() %>%
-  mutate(city = br_cities_sf$city)
+states <- st_read(file.path(secdata,"/uf1940/uf1940_prj.shp"))
+states_simple  <- rmapshaper::ms_simplify(states,keep=0.01,keep_shapes=TRUE)
+
+year  <- 2000
+file_name = paste0("/",year,"/highways_",year,"_prj.shp")
+    all_highways <- st_read(file.path(secdata, "roads", file_name))
+all_highways_simple  <- rmapshaper::ms_simplify(all_highways,keep=0.01,keep_shapes=TRUE)
+
 ```
 
-Plot Brazil's road infrastructure
+Read in Minimum Spanning Tree (MST) road network
+```{r}
+mst_pie <- st_read(file.path(secdata, "mst/mst_pie_prj.shp"))
+mst_pie_simple  <- rmapshaper::ms_simplify(mst_pie,keep=0.01,keep_shapes=TRUE)
+```
+
+Read in cities
+```{r}
+capital_cities <- st_read(file.path(secdata,"/cities/brazil_capital_cities_prj.shp"))
+cities_xy <- cbind(capital_cities,st_coordinates(capital_cities))
+```
+
+
+Plotting Figure 1 : Map of straight-line instrument and radial highways 
 ```{r}
 ggplot() +
-  geom_sf(data = sf.br_roads, aes(color = leg_multim), size = 0.5) +  
-  geom_sf(data = br_cities_sf, shape = 21, fill = "black", color = "black", size = 0.5) +
-  geom_text(data = br_cities_labels, aes(x = X, y = Y, label = city),
-            nudge_y = 0.1, color = "black", size = 3.5, check_overlap = TRUE) +
-  labs(title = "Federal Highways and Cities in Brazil",caption = "Brasil") +
+  geom_sf(data=states_simple, fill="white", color="grey90") +
+  geom_sf(data=mst_pie_simple, size=.6, linetype = "11", aes(color = "Minimum spanning tree"), show.legend = "line")   +
+  geom_sf(data=dplyr::filter(all_highways_simple, dm_anlys_p==1 & dm_radial==0), size=.3, linetype = "dashed", aes(color = "Non-radial highways (2000)"), show.legend = "line") +
+  geom_sf(data=dplyr::filter(all_highways_simple, dm_anlys_p==1 & dm_radial==1), size=0.6, aes(color = "Radial highways (2000)"), show.legend = "line") +
   theme_minimal() +
-  theme(legend.position = "right", 
-        plot.caption = element_text(hjust = 0.5, size = 10),
-        axis.title = element_blank(),
+  theme(axis.title = element_blank(),
         axis.text = element_blank(),
-        axis.ticks = element_blank()) 
+        axis.ticks = element_blank(),
+        panel.grid = element_blank()) +  # Rimuove anche la griglia
+  geom_point(data=cities_xy,aes(x=X,y=Y)) +
+  geom_text_repel(data=cities_xy,aes(x=X,y=Y,label=CITY_NAME)) +
+  labs(color = " ") +
+  scale_color_manual(values=c("#777676","#868686","#565555"),
+                     guide = guide_legend(override.aes = list(linetype = c("11", "dashed", "solid"))))
 
 ```
-
-Clean the enviorment for the next Assignment
+Clean the enviorment for the execution of the next task
 ```{r}
 rm(list=ls())
 ```
@@ -121,14 +150,6 @@ west_union <- st_union(west_regions) # it is a Multipolygon but we need to turn 
 west_union_sf <- st_sf(geometry = st_union(west_union))
 ```
 
-The main focus in the Paper is on the western meso-regions, as we plot in the following picture
-```{r}
-ggplot() +
-  geom_sf(data = sf.br_mesoregiones, aes(colour = NA)) +
-  geom_sf(data = west_union_sf, fill = NA, color = "red") +  
-  theme_minimal() +
-  labs(color = "Western meso-regiones' population density") 
-```
 Sinse we do not have data on meso-regiones population density we left_join the original dataset on Brazil with a dataset that still doesn't have any info on density, but at least collects population's data.
 ```{r}
 Brazil <- sf.br_mesoregiones %>% 
@@ -284,13 +305,11 @@ SouthAfrica.shp <- "data/LocalMunicipalities2018_Final.shp"
 sf.SouthAfrica <- st_read(SouthAfrica.shp)
 ```
 
-
 Load river gradient raster
 ```{r}
 #install.packages(c("raster", "sf", "exactextractr"))
 library(raster)
 ```
-
 ```{r}
 river_gradient_raster <- raster("data/South_Africa_SRMT30meters.tif")
 ```
@@ -298,15 +317,12 @@ river_gradient_raster <- raster("data/South_Africa_SRMT30meters.tif")
 Ensure CRS alignment between shapefiles and raster
 ```{r}
 sf.SouthAfrica <- st_transform(sf.SouthAfrica, crs(river_gradient_raster))
-
 ```
 
 Add the extracted river gradient data to the shapefile
 ```{r}
 river_gradients_by_region <- exact_extract(river_gradient_raster, sf.SouthAfrica, 'mean')
-
 ```
-
 Extract average river gradient for each region
 ```{r}
 sf.SouthAfrica$avg_river_gradient <- river_gradients_by_region
@@ -377,6 +393,10 @@ Differences are due to the datasets. We did not find the same District boundarie
 and this probably caused the average river gradient to be computed over different 
 regions in terms of dimension.
 
+Clean the enviorment for the execution of the next task
+```{r}
+rm(list=ls())
+```
 
 # ETHIOPIA *distircts*
 
@@ -465,6 +485,8 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *Vietnam’s road infrastructure by road type*
 
+**attenzione**= il dataset preso in considerazione non ha serie temporali e soprattutto è diverso da quello costruito da Balboni
+
 Import data set on Vietam's roads
 ```{r}
 Vietnam_roads <-"data/vnm_rdsl_2015_OSM.shp"
@@ -483,48 +505,7 @@ sf.Vietnam_roads <- sf.Vietnam_roads %>%
   ))
 ```
 
-For some reason the aes(size) doesn't work
-```{r}
-ggplot() +
-  geom_sf(data = sf.Vietnam_roads, aes(size = road_category, color = road_category)) +  
-  scale_size_manual(values = c("Freeway" = 3, 
-                               "Dual carriageway" = 2.5, 
-                               "Major roads" = 2, 
-                               "Minor roads" = 1.5, 
-                               "Other roads" = 1)) +  
-  scale_color_manual(values = c("Freeway" = "red", 
-                                "Dual carriageway" = "blue", 
-                                "Major roads" = "green", 
-                                "Minor roads" = "orange", 
-                                "Other roads" = "purple")) +  
-  labs(title = "Tipologie di Strade in Vietnam e Città", 
-       size = "Spessore delle Strade", 
-       color = "Categoria di Strada") +
-  theme_minimal()
-
-```
-
-```{r}
-ggplot() +
-  geom_sf(data = sf.Vietnam_roads, aes(color = road_category)) +  
-  scale_color_manual(values = c("Freeway" = "red", 
-                                "Dual carriageway" = "blue", 
-                                "Major roads" = "green", 
-                                "Minor roads" = "orange", 
-                                "Other roads" = "purple")) +  
-  labs(title = "Vietnam's roads type", 
-       color = "Type") +
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),         # Rimuove la griglia
-    legend.position = "left",             # Sposta la leggenda sulla sinistra
-    axis.title = element_blank(),          # Rimuove i titoli degli assi
-    axis.text = element_blank(),           # Rimuove i testi degli assi
-    axis.ticks = element_blank()           # Rimuove i tick marks degli assi
-  )
-
-```
-ultima prova ma la size non funziona 
+Size non funziona 
 ```{r}
 sf.Vietnam_roads$road_category <- as.factor(sf.Vietnam_roads$road_category)
 aes(color = road_category, size = ifelse(road_category == "Freeway", 2, 1))
@@ -597,7 +578,7 @@ sf.Mexico <- world %>%
   filter(name_long == 'Mexico')
 ```
 
-Graph with no manual manipulations. We
+Graph with no manual manipulations.
 ```{r}
 # Creazione del grafico
 ggplot() +
@@ -736,6 +717,5 @@ final_plot <- annotate_figure(combined_plot,
 
 # Visualizzazione del grafico finale
 print(final_plot)
-
 ```
 
