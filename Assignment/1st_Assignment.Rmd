@@ -1,6 +1,6 @@
 ---
 title: "First Assignement"
-author: "Davide Delfino, Elena Mannino, Sara Tozzi, Marco"
+author: "Marco Valentino Caravella, Davide Delfino, Elena Mannino, Sara Tozzi"
 date: "2024-10-03"
 output:
   pdf_document:
@@ -26,6 +26,7 @@ getwd()
 path <- "C:/Users/Davide/Desktop/Alma Mater/SECOND YEAR/GIS/Assignment"
 setwd(path)
 ```
+
 Those are the libraries we will need to fulfill each task
 ```{r}
 library(sf)
@@ -57,6 +58,7 @@ library(gmapsdistance)
 library(units)
 library(ggpubr)
 library(elevatr)
+library(raster)
 conflicts_prefer(dplyr::filter) #to avoid any kind of conflict error
 ```
 
@@ -70,7 +72,7 @@ conflicts_prefer(dplyr::filter) #to avoid any kind of conflict error
 secdata <- file.path(path,"data","Brazil")
 ```
 
-Import dataset on Brasil states and highways
+Import dataset on Brasil states and highways.
 ```{r}
 states <- st_read(file.path(secdata,"/uf1940/uf1940_prj.shp"))
 states_simple  <- rmapshaper::ms_simplify(states,keep=0.01,keep_shapes=TRUE)
@@ -114,7 +116,7 @@ ggplot() +
                      guide = guide_legend(override.aes = list(linetype = c("11", "dashed", "solid"))))
 
 ```
-Clean the enviorment for the execution of the next task
+Now we clean the environment for the execution of the next task.
 ```{r}
 rm(list=ls())
 ```
@@ -150,21 +152,21 @@ west_union <- st_union(west_regions) # it is a Multipolygon but we need to turn 
 west_union_sf <- st_sf(geometry = st_union(west_union))
 ```
 
-Sinse we do not have data on meso-regiones population density we left_join the original dataset on Brazil with a dataset that still doesn't have any info on density, but at least collects population's data.
+Since we do not have data on meso-regiones population density we left_join the original dataset on Brazil with a dataset that still doesn't have any info on density, but at least collects population's data.
 ```{r}
 Brazil <- sf.br_mesoregiones %>% 
   left_join(pop_mesoregiones,by = c("NM_MESO" =  "Brasil, Grande Região, Unidade da Federação e Mesorregião Geográfica"))
 ```
 
-Let's try to create three plots on the evolution of brazil's population density in 30-years period.
-convert in factor years and compute the density for each year. Sinice in every year observations on popiulation is missing forn Lago mirim and Lago dos patos, we can exclude them from the dataset
+We try to create three plots on the evolution of Brazil's population density in 30-years period.
+First, we convert in factor years and then we compute the density for each year. Since in every year observations on population is missing for Lago mirim and Lago dos patos, we can exclude them from the dataset
 ```{r}
-# Rimuovi le osservazioni con NA nella colonna "1991"
+# Na observations has been remuved from "1991"
 Brazil <- Brazil %>%
-  filter(!is.na(`1991`))  # Usa backticks se il nome della colonna contiene numeri
+  filter(!is.na(`1991`))  # we used the backticks because the coloumn was named by numbers
 ```
 
-calcoliamo la "densità di popolazione" del brasile dopo aver convertito in numeriche le variabili di interesse
+We compute the population density after converting our variables of interest into numerical variables. 
 ```{r}
 Brazil$`1991` <- as.numeric(as.character(Brazil$`1991`))
 Brazil$`2000` <- as.numeric(as.character(Brazil$`2000`))  
@@ -178,7 +180,7 @@ pop_mean_2000 <- mean(Brazil$`2000`, na.rm = TRUE)
 pop_mean_2010 <- mean(Brazil$`2010`, na.rm = TRUE)
 ```
 
-create a new variable with density. Compute for every region the percentage population density
+We create a new variable for every year population share
 ```{r}
 Brazil <- Brazil %>%
   mutate(
@@ -187,9 +189,8 @@ Brazil <- Brazil %>%
     density_2010 = `2010` / pop_mean_2010
   )
 ```
--4 meso-regiones:  hanno una popolazione superiore a 4 volte la media
--5 mesoregiones: hanno una popolazione superiore a 2 volte la media
-Creiamo manualmente delle categorie basate sui valori di densità per ogni anno ed assegnamo dei colori corrispondenti per ogni categoria
+
+We create manually the categories based on the density values for each year and we assign a color to each category. 
 ```{r}
 Brazil <- Brazil %>%
   mutate(density_category_1991 = cut(density_1991, 
@@ -212,14 +213,14 @@ Brazil <- Brazil %>%
                                  right = FALSE)) 
 
 
-colors <- c("Very Low" = "#f0f8ff",  # Azzurro chiarissimo
+colors <- c("Very Low" = "#f0f8ff",
             "Low" = "#87ceeb",      
             "Medium" = "#4682b4",  
             "High" = "blue",     
-            "Very High" = "navy") # Blu scuro
+            "Very High" = "navy")
 ```
 
-creiamo un grafico per ogni anno di interesse( sono diversi da quelli del paper per via di dataset differneti)
+Now we create one graph for each year of interest. Note that, since the data we used differ from those of the paper we refer to, the graphs are not exactly equal.
 ```{r}
 legend_title <- "pop.share"
 
@@ -307,10 +308,6 @@ sf.SouthAfrica <- st_read(SouthAfrica.shp)
 
 Load river gradient raster
 ```{r}
-#install.packages(c("raster", "sf", "exactextractr"))
-library(raster)
-```
-```{r}
 river_gradient_raster <- raster("data/South_Africa_SRMT30meters.tif")
 ```
 
@@ -323,6 +320,7 @@ Add the extracted river gradient data to the shapefile
 ```{r}
 river_gradients_by_region <- exact_extract(river_gradient_raster, sf.SouthAfrica, 'mean')
 ```
+
 Extract average river gradient for each region
 ```{r}
 sf.SouthAfrica$avg_river_gradient <- river_gradients_by_region
@@ -335,19 +333,16 @@ plot(sf.SouthAfrica$geometry, add=TRUE)
 Check CRS of the raster (optional)
 ```{r}
 crs(river_gradient_raster)
-
 ```
 
 Check CRS of the vector data (optional)
 ```{r}
 st_crs(sf.SouthAfrica)
-
 ```
 
 Remove NA
 ```{r}
 sf.SouthAfrica <- sf.SouthAfrica %>% filter(!is.na(avg_river_gradient))
-
 ```
 
 Classify the average river gradient into 6 intervals
@@ -362,7 +357,6 @@ sf.SouthAfrica <- sf.SouthAfrica %>%
                                          "9.879707 - 13.130823", 
                                          "13.130823 - 19.829017"),
                               include.lowest = TRUE))
-
 ```
 
 Create the plot
@@ -386,7 +380,6 @@ ggplot() +
     axis.text = element_blank(),
     axis.ticks = element_blank()
   )
-
 ```
 We get a slightly different plot with respect to the figure we want to replicate. 
 Differences are due to the datasets. We did not find the same District boundaries
@@ -405,7 +398,7 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *districts and electricity grid in Ethiopia*
 
-Dataset we'll need:
+Load the datasets
 ```{r}
 #data that ontains data for the major roads of Ethiopia
 shproads<-"data/Ethiopia_Roads.shp"
@@ -432,19 +425,19 @@ plantseth<-plantsafr2 %>%
   filter(country=='Ethiopia')
 ```
 
-usare la funzione st_zm() del pacchetto sf in R per rimuovere la dimensione "Z(density)" dalle geometrie.
+we use the function "st_zm()" to remove the dimension "Z(density)" from the geometries.
 ```{r}
 # remove height (or depth) coordinates from a spatial object
 sf.roads <- st_zm(sf.roads)
 sf.pwret <- st_zm(sf.pwret)
 ```
 
-do a log transformation of the population density data to allow for a better visualization.
+we perform a log transformation of the population density data to allow for a better visualization.
 ```{r}
 podens_district$log_POP_DENS <- log1p(podens_district$POP_DENS)
 ```
 
-Assign a CRS (Coordinate Reference System) to the population density to insure compatibility between datasets. Therefore, we assigned the CRS corresponding to Ethiopia to ensure compatibility with the other components of the graph. Similarly, it is necessary to transform the power plant dataframe into an sf object and then set the appropriate CRS.
+We assign a CRS (Coordinate Reference System) to the population density to insure compatibility between datasets. Therefore, we assigned the CRS corresponding to Ethiopia to ensure compatibility with the other components of the graph. Similarly, it is necessary to transform the power plant dataframe into an sf object and then set the appropriate CRS.
 
 ```{r}
 podens_district <- st_set_crs(podens_district, 32637) # Replace with the appropriate EPSG code
@@ -453,9 +446,7 @@ plantseth_sf <- st_transform(plantseth_sf, 32637)
 st_crs(plantseth_sf)
 ```
 
-Plot the graph.
-
-In the graph, the yellow point represents the Ethiopian power plants, the red lines indicate the high-voltage grid, and the black lines depict the major roads of Ethiopia.
+Plot the graph. In the graph, the yellow point represents the Ethiopian power plants, the red lines indicate the high-voltage grid, and the black lines depict the major roads of Ethiopia.
 
 ```{r}
 ggplot() +
@@ -485,7 +476,7 @@ rm(list=ls())
 
 **Aim**: Replicate Figure 2 from the paper, which illustrates *Vietnam’s road infrastructure by road type*
 
-**attenzione**= il dataset preso in considerazione non ha serie temporali e soprattutto è diverso da quello costruito da Balboni
+**attenzione**= the dataset we used is not the same of the author of the paper. This justifies the missing time series Vietnam's observations of roads and also the difference the resulted graph. However, we decided to present also a replication of this paper's plot, even if it is not accurate enough.
 
 Import data set on Vietam's roads
 ```{r}
@@ -493,7 +484,7 @@ Vietnam_roads <-"data/vnm_rdsl_2015_OSM.shp"
 sf.Vietnam_roads <- st_read(Vietnam_roads)
 ```
 
-Aggregate road type in 5 cathegories
+Aggregate road type in 5 categories: freeway, dual carriageway, major roads, minor roads and other roads.
 ```{r}
 sf.Vietnam_roads <- sf.Vietnam_roads %>%
   mutate(road_category = case_when(
@@ -505,24 +496,19 @@ sf.Vietnam_roads <- sf.Vietnam_roads %>%
   ))
 ```
 
-Size non funziona 
+Plot the graph
 ```{r}
 sf.Vietnam_roads$road_category <- as.factor(sf.Vietnam_roads$road_category)
 aes(color = road_category, size = ifelse(road_category == "Freeway", 2, 1))
 
 
 ggplot() +
-  geom_sf(data = sf.Vietnam_roads, aes(color = road_category, size = road_category)) +  
+  geom_sf(data = sf.Vietnam_roads, aes(color = road_category)) +  
   scale_color_manual(values = c("Freeway" = "red", 
                                  "Dual carriageway" = "blue", 
                                  "Major roads" = "green", 
                                  "Minor roads" = "orange", 
-                                 "Other roads" = "purple")) +  
-  scale_size_manual(values = c("Freeway" = 10,  # Spessore per le autostrade
-                                "Dual carriageway" = 7,  # Spessore per le carreggiate
-                                "Major roads" = 4,  # Spessore per le strade principali
-                                "Minor roads" = 2,  # Spessore per le strade secondarie
-                                "Other roads" = 0.1)) +  # Spessore per le altre strade
+                                 "Other roads" = "purple")) + 
   labs(title = "Vietnam's roads type", 
        color = "Type", 
        size = "Relevance") +  # Aggiungi una legenda per la dimensione
@@ -557,7 +543,7 @@ sf.France <- world %>%
   filter(name_long %in% 'France')
 ```
 
-To exclude this overses land we implemented the following procedure: Isolate Frence, extract the list in geometry involving polygons of Polynesia and eliminate it. Could be reasable to move it toward French Southern and Antarctic Lands.
+To exclude this overses land we implemented the following procedure: Isolate Frence, extract the list in geometry involving polygons of Polynesia and eliminate it. Could be reasonable to move it toward French Southern and Antarctic Lands.
 ```{r}
 France <- world[world$name_long == "France",]
 
@@ -582,24 +568,14 @@ Graph with no manual manipulations.
 ```{r}
 # Creazione del grafico
 ggplot() +
-  geom_sf(data = sf.EU, aes(fill = continent), color = "black") +
-  geom_sf(data = sf.Mexico, aes(fill = "Mexico"), color = "black", inherit.aes = FALSE) +
+  geom_sf(data = sf.EU, aes(fill = continent), color = "black", alpha = 0.6) +
+  geom_sf(data = sf.Mexico, aes(fill = "Mexico"), color = "black", inherit.aes = FALSE, alpha = 0.6) +
   scale_fill_manual(values = c("Europe" = "blue"  , "Mexico" = "red")) + 
   theme_minimal() +
   labs(title = "Europe and Mexico")
 ```
-other graphs
-```{r}
-ggplot() +
-  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.2) +
-  geom_sf(data = sf.Mexico, aes(fill = region_un), color = "black", alpha = 0.2) +
-  theme_minimal() +
-  labs(title = "Europe and Mexico", fill = "Region") +
-  theme(legend.position = "right")  # Nasconde la legenda se non necessaria
-
-```
-Verifica del CRS per sf.EU e sf.Mexico Se il CRS è mancante, assegnalo manualmente.
-Applica la traslazione al Messico per sovrapporlo all'Europa. Funzione per spostare manualmente le geometrie (traslazione). Applichiamo manualemnte uno spostamento sia verso est +120 che a nord +20
+Now we verify CRS for Europe and Mexico to make sure that it is not missing.
+Then, we traslate the Mexico in order to overlap it wit Europe: we managed to do so by setting manually the shift towards East (+120) and North (+20) that needs to occur in order to overlap them.
 ```{r}
 st_crs(sf.EU)
 st_crs(sf.Mexico)
@@ -631,7 +607,7 @@ if (is.na(st_crs(sf.Mexico_shifted))) {
 st_crs(sf.Mexico_shifted)
 ```
 
-Now overlapping the 2 figures is possible
+Now overlapping the 2 figures is possible according to the given coordinate reference system.
 ```{r}
 sf.Mexico_shifted
 ggplot() +
@@ -643,7 +619,7 @@ ggplot() +
 
 ```
 
-Playing with coordinate refrence systems. comparison among different projections
+Playing with coordinate refrence systems. (1st trial)
 ```{r}
 st_crs(sf.Mexico_shifted)<- 3857
 st_crs(sf.EU)<- 3857
@@ -655,7 +631,7 @@ ggplot() +
   theme(legend.position = "none")  # Nasconde la legenda se non necessaria
 
 ```
-SOVRAPPOSIZIONE
+Now overlapping the 2 figures is possible. (2nd trial)
 ```{r}
 st_crs(sf.Mexico_shifted)<- 3035
 st_crs(sf.EU)<- 3035
@@ -667,25 +643,7 @@ ggplot() +
   theme(legend.position = "none")  # Nasconde la legenda se non necessaria
 
 ```
-SOVRAPPOSIZIONE
-```{r}
-st_crs(sf.Mexico_shifted)<- 4326
-st_crs(sf.EU)<- 4326
-ggplot() +
-  geom_sf(data = sf.EU, aes(fill = region_un), color = "black", alpha = 0.5) +  # Europa con trasparenza
-  geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +  # Messico sopra con trasparenza
-  theme_minimal() +
-  labs(title = "Europe with Mexico on Top", fill = "Region") +
-  theme(legend.position = "none")  # Nasconde la legenda se non necessaria
-
-```
-5. Spostamento senza trasformazione
-Se i tuoi dati spaziali non sono stati trasformati correttamente in base al CRS, potresti continuare a vedere le stesse geometrie sulla mappa, ma questo non significa che siano state correttamente allineate al sistema di coordinate desiderato.
-
-3. Rappresentazione su scala globale
-Se visualizzi dati a livello globale, alcune proiezioni possono distorcere le aree, ma l'effetto potrebbe non essere evidente se le geometrie sono simili. Le proiezioni come Mercator possono distorcere le dimensioni delle terre vicine ai poli, ma non in modo tale da influenzare drasticamente aree più piccole.
-
-FINAL COMPARISON SCEGLIETE VOI QUALI VOLETE TENERE E PROVATE ALTRE PROJECTIONS
+FINAL COMPARISON: it is clear that the maps we plotted with different levels of CRS do not differ significantly. Actuallt, when we plot Global Scale Representation, that means visualizing data at a global level, some projections may distort areas, though the effect may not be noticeable if the geometries are similar. Below we show the differences between the already seen CRS. CRS 4326 uses a geographic coordinate system (degrees) suitable for global datasets, while CRS 3857 uses a projected coordinate system that’s ideal for web mapping but can distort large-scale maps, especially at high latitudes.
 ```{r}
 
 st_crs(sf.Mexico_shifted) <- 4326
@@ -695,8 +653,8 @@ plot_4326 <- ggplot() +
   geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +
   theme_minimal() +
   labs(subtitle = "CRS: 4326") +
-  theme(legend.position = "none") +  # Nasconde la legenda
-  coord_sf(expand = FALSE)  # Elimina lo spazio extra
+  theme(legend.position = "none") +  
+  coord_sf(expand = FALSE)  
 
 st_crs(sf.Mexico_shifted) <- 3857
 st_crs(sf.EU) <- 3857
@@ -705,17 +663,13 @@ plot_3857 <- ggplot() +
   geom_sf(data = sf.Mexico_shifted, aes(fill = region_un), color = "black", alpha = 0.5) +
   theme_minimal() +
   labs(subtitle = "CRS: 3857") +
-  theme(legend.position = "none") +  # Nasconde la legenda
-  coord_sf(expand = FALSE)  # Elimina lo spazio extra
+  theme(legend.position = "none") + 
+  coord_sf(expand = FALSE)  
 
-# Affiancamento dei due grafici
+# combined plots
 combined_plot <- grid.arrange(plot_4326, plot_3857, ncol = 2)
 
-# Aggiunta del titolo generale
+# Give a single title
 final_plot <- annotate_figure(combined_plot,
                               top = text_grob("Comparison between different projections", face = "bold", size = 14))
-
-# Visualizzazione del grafico finale
-print(final_plot)
 ```
-
