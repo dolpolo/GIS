@@ -1,0 +1,6 @@
+---
+title: "NetCDF_NASA"
+author: "Marco Caravella, Davide Delfino, Elena Mannino"
+date: "2024-10-11"
+output: html_document
+---
