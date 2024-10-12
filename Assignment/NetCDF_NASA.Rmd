@@ -4,3 +4,48 @@ author: "Marco Caravella, Davide Delfino, Elena Mannino"
 date: "2024-10-11"
 output: html_document
 ---
+Commands to set the directory:
+```{r}
+getwd()
+path <- "C:/Users/Davide/Desktop/Alma Mater/SECOND YEAR/GIS/Assignment"
+setwd(path)
+```
+
+Those are the libraries we will need to fulfill each task:
+```{r}
+library(sf)
+library(spData)
+library(tidyverse) 
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(viridis)
+```
+
+# NetCDF_NASA assignment
+
+*Paper:* Porteous, O., 2019. High trade costs and their consequences: An estimated dynamic model of African
+agricultural storage and trade. American Economic Journal: Applied Economics, 11(4), pp.327-66.
+
+*Tasks:* download the paper’data, combine with world and transportation data to:
+1- Generate an sf MULTIPOINT feature of markets across Africa and plot it;
+2- Calculate minimum distance of each market to the (i) nearest road, and (ii) nearest port, (iii) nearest
+airport;
+3- Produce 3 scatter plots relating market average prices to the minimum distances.
+
+*Note*: the paper appendix contains a lot of useful information about the market price data
+
+# DISCUSSION ON THE PAPER
+
+
+# DATA PREPARING PROCESS
+
+
+# MARKET ACROSS AFRICA
+
+
+# COMPUTATION OF DISTANCES
+
+
+# RELATION BETWEEN MARKET AVERAGE PRICE AND MINIMUM DISTANCES
+# 
