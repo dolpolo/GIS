@@ -12,6 +12,9 @@ library(readxl)
 library(dplyr)
 library(viridis)
 library(ggimage)
+library(sfnetworks)
+library(tidygraph)
+library(nngeo)
 
 # ------------------------------netCDF_NASA assignment -------------------------
 #download the paper’s data [here], combine with world and transportation data (available at NaturalEarth) to:
@@ -58,14 +61,136 @@ ggplot() +
 Mrk_multipoints <- st_combine(sf_markets)
 
 ggplot()+
-  geom_sf(data = world,aes(colour = NULL))+
-  geom_sf(data = Mrk_multipoints, shape= 2, size=1,color = "red")+
-  geom_sf(data=Roads,aes(colour = scalerank), alpha= 0.2)+
-  geom_sf(data = Ports, aes(colour = NULL), shape = 2, size = 5, color = "black")+
+  geom_sf(data = world, fill = "#FFFFCC")+
+  geom_sf(data = Mrk_multipoints, shape= 2, size=1,color = "darkgreen")+
+  geom_sf(data=Roads,aes(colour = NULL), alpha= 0.2)+
+  geom_sf(data = Ports, aes(colour = NULL), shape = 2, size = 5, color = "red")+
   geom_sf(data = Airports, aes(colour = NULL), shape = 8, size = 5, color = "blue")+
-  geom_sf(data = sub_saharan_borders, fill = NA, color = "red")+
-  theme_minimal()
-  
+  geom_sf(data = sub_saharan_borders, fill = NA, color = "brown")+
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank()
+  ) +
+  labs(title = "Sub-Saharan African Markets, Ports, and Airports")
+
+ggplot() +
+  geom_sf(data = world, fill = "#FFFFCC") +
+  geom_sf(data = Mrk_multipoints, shape = 2, size = 1, color = "darkgreen", show.legend = TRUE) +
+  geom_sf(data = Roads, alpha = 0.2, color = "gray", show.legend = TRUE) +
+  geom_sf(data = Ports, shape = 2, size = 5, color = "blue", show.legend = TRUE) +
+  geom_sf(data = Airports, shape = 8, size = 5, color = "red", show.legend = TRUE) +
+  geom_sf(data = sub_saharan_borders, fill = NA, color = "brown", show.legend = FALSE) +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank()
+  ) +
+  labs(title = "Sub-Saharan African Markets, Ports, and Airports") +
+  guides(
+    color = guide_legend(
+      override.aes = list(
+        shape = c(2, NA, 2, 8),
+        color = c("darkgreen", "gray", "blue", "red"),
+        size = c(1, 0.2, 5, 5)
+      ),
+      title = "Legend",
+      labels = c("Markets (green)", "Roads (gray)", "Ports (blue)", "Airports (red)")
+    )
+  )
+
+# ---- tentativi per leggenda
+ggplot() +
+  geom_sf(data = world, fill = "#FFFFCC") +
+  geom_sf(data = Mrk_multipoints, aes(color = "Markets"), size = 1.5, show.legend = TRUE) +
+  geom_sf(data = Roads, aes(color = "Roads"), alpha = 0.3, show.legend = TRUE) + 
+  geom_sf(data = Ports, aes(color = "Ports"), size = 1.5, show.legend = TRUE) +
+  geom_sf(data = Airports, aes(color = "Airports"), size = 1.5, show.legend = TRUE) +
+  geom_sf(data = sub_saharan_borders, fill = NA, color = "brown", show.legend = FALSE) +
+  scale_color_manual(
+    name = "Legend", 
+    values = c("Markets" = "darkgreen", "Roads" = "grey", "Ports" = "blue", "Airports" = "red"),
+    labels = c("Markets", "Roads", "Ports", "Airports")  
+  ) +
+  labs(title = "Sub-Saharan African Markets, Ports, and Airports") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+# Il migliore per ora
+ggplot() +
+  geom_sf(data = world, fill = "#FFFFCC") +
+  geom_sf(data = sf_markets, aes(color = "Markets"), size = 1.5) +
+  geom_sf(data = Roads, aes(color = "Roads"), alpha = 0.3) + 
+  geom_sf(data = Ports, aes(color = "Ports"), size = 5, shape = 2) +
+  geom_sf(data = Airports, aes(color = "Airports"), size = 5, shape = 8) +
+  geom_sf(data = sub_saharan_borders, fill = NA, color = "brown", show.legend = FALSE) +
+  scale_color_manual(
+    values = c("Markets" = "darkgreen", "Roads"= "grey", "Ports" = "blue", "Airports" = "red"),
+    name = "Legend:"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank()
+  ) +
+  labs(title = "Sub-Saharan African Markets, Ports, and Airports")
+
+# ---- Marco's contribution ----
+
+sf.Sub_Saharan_Africa <- sf.world %>% 
+  filter(continent %in% c('Africa') & !(iso_a2 %in% c('EG','LY','TN','DZ','MA', 'MG', 'EH')) ) 
+
+# Plot Sub Saharan Africa with markets
+ggplot()+
+  geom_sf(data=sf.Sub_Saharan_Africa, fill = "#FFFFCC") +
+  geom_sf(data = sf.markets, col = "black", size = 0.8) +
+  theme_minimal() +
+  theme( panel.grid.major = element_blank(),  
+         panel.grid.minor = element_blank(),   
+         axis.text.x = element_blank(),  # Remove x-axis (longitude) text
+         axis.text.y = element_blank(),  # Remove y-axis (latitude) text
+  ) +
+  labs( title = "Sub-Saharan African Markets")
+
+# Plot sub-saharan african ports and airports 
+ports <- ports %>%
+  st_filter(sf.Sub_Saharan_Africa)
+airports <- airports %>% 
+  st_filter(sf.Sub_Saharan_Africa)  
+roads <- roads %>% 
+  st_filter(sf.Sub_Saharan_Africa)
+
+ggplot() +
+  geom_sf(data = sf.Sub_Saharan_Africa, fill = "#FFFFCC") +
+  geom_sf(data = sf.markets, aes(color = "Markets"), size = 0.8) +
+  geom_sf(data = ports, aes(color = "Ports"), size = 1, shape = 2) +
+  geom_sf(data = airports, aes(color = "Airports"), size = 1, shape = 8) +
+  scale_color_manual(
+    values = c("Markets" = "black", "Ports" = "red", "Airports" = "blue"),
+    name = "Legend:"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank()
+  ) +
+  labs(title = "Sub-Saharan African Markets, Ports, and Airports")
+
 
 # --------------------- minimum distance of each market to: --------------------
 
@@ -85,6 +210,97 @@ Min_Dis_Mrk_Prt <- apply(Mrk_Prt, 1, min)
 Mrk_Air<- st_distance(sf_markets,Airports,by_element = F)
 Min_Dis_Mrk_Air <- apply(Mrk_Air, 1, min)
 
+# ---- Marco's contribution ----
+
+#(i) Find the nearest distance between markets and roads
+mkt_rds<- st_distance(sf_markets, Roads,)
+min_dis_mkt_rds <- apply(mkt_rds, 1, min) 
+
+# Add the minimum distances as a new column in the sf.markets data
+sf_markets$min_distance_to_road <- min_dis_mkt_rds
+
+# View the first few rows to check the results
+print(sf_markets)
+
+sf_Sub_Saharan_Africa <- world %>% 
+  filter(continent %in% c('Africa') & !(iso_a2 %in% c('EG','LY','TN','DZ','MA', 'MG', 'EH')) ) 
+
+# Plot the results
+ggplot() +
+  geom_sf(data = sf_Sub_Saharan_Africa, fill = "#FFFFCC") +
+  geom_sf(data = Roads, color = "lightgrey") +
+  geom_sf(data = sf_markets, aes(color = min_distance_to_road), size = 0.8) +
+  scale_color_gradient(
+    low = "blue", high = "red",  
+    name = "Distance to Road (m)",
+    breaks = seq(0, max(sf_markets$min_distance_to_road), by = 5000)  
+  ) +
+  labs(title = "Distance from Markets to Nearest Road") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  ) 
+
+#(ii) Find the nearest distance between markets and airports
+mkt_airprt<- st_distance(sf_markets, Airports)
+min_dis_mkt_airprt <- apply(mkt_rds, 1, min)
+print(min_dis_mkt_airprt)
+
+# Add the minimum distances as a new column in the sf.markets data
+sf_markets$min_distance_to_airprt <- min_dis_mkt_airprt
+
+ggplot() +
+  geom_sf(data = sf_Sub_Saharan_Africa, fill = "#FFFFCC") +
+  geom_sf(data = Airports, size = 1, shape = 8) +
+  geom_sf(data = sf_markets, aes(color = min_dis_mkt_airprt), size = 0.8) +
+  scale_color_gradient(
+    low = "blue", high = "red",  
+    name = "Distance to Airport(m)",
+    breaks = seq(0, max(sf_markets$min_distance_to_airprt), by = 5000)) +
+  labs(title = "Distance from Markets to Nearest Airport") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "right",  # Adjust legend position
+    legend.title = element_text(size = 12),  # Customize legend title size
+    legend.text = element_text(size = 10)  # Customize legend text size
+  ) 
+
+#(iii) Find the nearest distance between markets and ports
+mkt_prt<- st_distance(sf_markets, Ports)
+min_dis_mkt_prt <- apply(mkt_airprt, 1, min)
+sf_markets$min_distance_to_prt <- min_dis_mkt_prt
+
+ggplot() +
+  geom_sf(data = sf_Sub_Saharan_Africa, fill = "#FFFFCC") +
+  geom_sf(data = Ports, size = 1, shape = 8) +
+  geom_sf(data = sf_markets, aes(color = min_distance_to_prt), size = 0.8) +
+  scale_color_gradient(
+    low = "blue", high = "red",  
+    name = "Distance to Port (km)",
+    breaks = c(0, 50000, 100000, 200000, 500000, max(sf_markets$min_distance_to_prt)),
+    labels = c("0", "50 km", "100 km", "200 km", "500 km", "Max")
+  ) +
+  labs(title = "Distance from Markets to Nearest Port") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
 
 # -------------- Market average prices vs. the minimum distances ---------------
 
@@ -151,6 +367,20 @@ plot(Market_price$avg_mrk_price, Market_price$Min_Dis_Mrk_Rds,
      main = "Scatterplot",  
      xlab = "price",  
      ylab = "distance_mrk_Rds",             
+     pch = 19,                    
+     col = "blue")
+
+plot(Market_price$avg_mrk_price, log(Market_price$Min_Dis_Mrk_Rds),
+     main = "Scatterplot",  
+     xlab = "price",  
+     ylab = "log(distance_mrk_Rds)",             
+     pch = 19,                    
+     col = "blue")
+
+plot(Market_price$avg_mrk_price, sqrt(Market_price$Min_Dis_Mrk_Rds),
+     main = "Scatterplot",  
+     xlab = "price",  
+     ylab = "sqrt(distance_mrk_Rds)",             
      pch = 19,                    
      col = "blue")
 
