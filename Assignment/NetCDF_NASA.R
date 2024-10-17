@@ -131,12 +131,12 @@ ggplot() +
 ggplot() +
   geom_sf(data = world, fill = "#FFFFCC") +
   geom_sf(data = sf_markets, aes(color = "Markets"), size = 1.5) +
-  geom_sf(data = Roads, aes(color = "Roads"), alpha = 0.3) + 
+  geom_sf(data = Roads, aes(color = "Roads"), alpha = 0.2) + 
   geom_sf(data = Ports, aes(color = "Ports"), size = 5, shape = 2) +
   geom_sf(data = Airports, aes(color = "Airports"), size = 5, shape = 8) +
   geom_sf(data = sub_saharan_borders, fill = NA, color = "brown", show.legend = FALSE) +
   scale_color_manual(
-    values = c("Markets" = "darkgreen", "Roads"= "grey", "Ports" = "blue", "Airports" = "red"),
+    values = c("Markets" = "darkgreen", "Roads"= "black", "Ports" = "blue", "Airports" = "red"),
     name = "Legend:"
   ) +
   theme_minimal() +
