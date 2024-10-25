@@ -1,0 +1,107 @@
+---
+title: "NetCDF_NASA"
+author: "Davide Delfino, student ID 1126595"
+date: "2024-10-30"
+output:
+  pdf_document:
+    toc: yes
+    latex_engine: xelatex
+  html_document:
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+  html_notebook:
+    number_sections: yes
+    toc: yes
+header-includes:
+  - \usepackage{fontspec}
+  - \setmainfont{Calibri Light}
+subtitle: NASA Earthdata Webinar
+editor_options:
+  chunk_output_type: inline
+---
+
+Commands to set the directory:
+```{r}
+getwd()
+path <- "C:/Users/Davide/Desktop/Alma Mater/SECOND YEAR/GIS/Exam"
+setwd(path)
+```
+
+Those are the libraries we will need to fulfill each task:
+```{r}
+library(sf)
+library(spData)
+library(tidyverse) 
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(viridis)
+library(ggimage)
+library(sfnetworks)
+library(tidygraph)
+library(nngeo)library(sf)
+library(spData)
+library(tidyverse) 
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(viridis)
+library(ggimage)
+library(terra) 
+library(ncdf4)
+```
+
+# Final Exam Structure
+
+Section A: Research Proposal (450 words max)
+           - Research Question
+           - Data & Methods
+           - Expected Outcomes/Contribution
+           
+Section B: Task replication on Serbian data
+           - Compulsory Handling Serbian data (9 tasks)
+           - Not mandatory (10 tasks)
+# SECTION B
+
+## Task 1
+
+Load the shapefile of countries, keep Serbia, and call it “shp”
+```{r}
+shp <- read_sf("data/Countries/ne_10m_admin_0_countries.shp") 
+shp <- shp %>%
+  filter( SU_A3 == "SRB")
+```
+
+Load the shapefile of European NUTS 3 regions, keep the NUTS 3 of Serbia, and call it “shp3”
+```{r}
+shp3 <- read_sf("data/NUTS_RG_01M_2021_4326_LEVL_3/NUTS_RG_01M_2021_4326_LEVL_3_repaired.shp")
+```
+
+codice RS perché questo è il codice ISO 3166-1 alpha-2 assegnato alla Serbia
+```{r}
+shp3 <- shp3 %>%
+  filter( CNTR_CODE == "RS")
+```
+
+Create a boundary box containing the shapefile of Serbia with a small margin and turn it into a sf object
+```{r}
+box <- st_bbox(shp)
+box <- box+c(-.5,-.5,.5,.5)
+
+box_sf <- st_as_sfc(box)
+```
+
+
+Plotting Serbia and the division according to the NUTS 3
+```{r}
+ggplot() +
+  geom_sf(data = shp) +              # Plotta il tuo shapefile
+  geom_sf(data = shp3) +
+  geom_sf(data = box_sf, fill = NA, color = "red") +  # Plotta il bounding box in rosso
+  theme_minimal()    
+```
+
+
+  
+
