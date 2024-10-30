@@ -139,7 +139,6 @@ extracted_spei_shp <- extract(reduced_spei, shp, fun=mean, na.rm=TRUE)
 # Extraxt spei data from "shp3": all regions in Serbia
 extracted_spei_shp3 <- extract(reduced_spei, shp3, fun=mean, na.rm=TRUE)
 
-
 # B- KEEP JUST YEARS 2015 AND 2016
 spei_2015 <- reduced_spei[["SPEI_2015"]]
 spei_2020 <- reduced_spei[["SPEI_2020"]]
@@ -329,8 +328,8 @@ avg_pop_den_2 # 95.35654 the less the resolution the widther the high populated 
 
 
 
-# -------------------------------- Section B: ---------------------------------
-# ******************************** Not Mandatory Tasks *********************** #
+# -------------------------------- Section B: ----------------------------------
+# ******************************** First Not Mandatory Tasks *******************
 
 ##################################  Task 10  ###################################
 
@@ -371,9 +370,6 @@ avg_pop_density_serbia
 # Create the ratio by dividing the resampled population density raster by the average population density
 pop_density_ratio <- resampled_population_density / avg_pop_density_serbia
 pop_density_ratio
-# Check the result by printing or plotting the ratio
-print(pop_density_ratio)
-plot(pop_density_ratio, main = "Population Density Ratio (Grid Point / Avg Pop Density in Serbia)")
 
 ## Step 3: Multiply the SPEI value in 2015 by the population density ratio
 
@@ -476,26 +472,28 @@ final_sf <- shp3 %>%
   select(NUTS_ID, agr_gva_2015,agr_gva_2016,agr_gva_2017,agr_gva_2018,
          agr_gva_2019, agr_gva_2020,geometry) %>%
   cbind(extracted_spei_shp3, water_stress_matrix) %>%
-  select(!ID)
+  select(!ID & !NUTS_ID)
 
-
+# compute the avereges for each variable
+final_sf_avg <- final_sf %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE))
 
 ##################################  Task 14  ###################################
 
 # Plot the time series of SPEI and water stress in Serbia from 2015 to 2020.
 
 # Reshape in long form the dataset
-final_sf_long <- final_sf %>%
+final_SPEI_sf_long <- final_sf_avg %>%
   pivot_longer(cols = starts_with("SPEI_"),  # Seleziona tutte le colonne che iniziano con "SPEI_"
                names_to = "year",             # Nome della nuova colonna per gli anni
-               values_to = "spei")            # Nome della nuova colonna per i valori SPEI
+               values_to = "spei")          # Nome della nuova colonna per i valori SPEI
 
 # Rimuovi "SPEI_" dal nome dell'anno per ottenere solo il numero
-final_sf_long <- final_sf_long %>%
+final_SPEI_sf_long <- final_SPEI_sf_long %>%
   mutate(year = as.numeric(gsub("SPEI_", "", year)))
 
 # Crea il grafico della serie temporale di SPEI dal 2015 al 2020
-ggplot(final_sf_long, aes(x = year, y = spei)) +
+ggplot(final_SPEI_sf_long, aes(x = year, y = spei)) +
   geom_line(color = "blue") +          # Linea di serie temporale
   geom_point(color = "red") +           # Punti per ogni anno
   labs(title = "Time Series of SPEI (2015-2020)",
@@ -503,44 +501,315 @@ ggplot(final_sf_long, aes(x = year, y = spei)) +
        y = "SPEI") +
   theme_minimal()
 
+final_water_sf_long <- final_sf_avg %>%
+  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
+         water_stress_2019, water_stress_2020) %>%
+  pivot_longer(cols = starts_with("water_stress"),  # Seleziona tutte le colonne che iniziano con "SPEI_" e "water_stress_"
+               names_to = "year",   
+               values_to = "water_stress")
+
+# Rimuovi "SPEI_" dal nome dell'anno per ottenere solo il numero
+final_water_sf_long <- final_water_sf_long %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+
+
+ggplot(final_water_sf_long, aes(x = year, y = water_stress)) +
+  geom_line(color = "blue") +          # Linea di serie temporale
+  geom_point(color = "red") +           # Punti per ogni anno
+  labs(title = "Time Series of water stress (2015-2020)",
+       x = "Year",
+       y = "water stress") +
+  theme_minimal()
+
+# merge the two datasets
+final_combined_long <- final_SPEI_sf_long %>%
+  select(year, spei) %>%
+  rename(value = spei) %>%
+  mutate(variable = "SPEI") %>%
+  bind_rows(
+    final_water_sf_long %>%
+      select(year, water_stress) %>%
+      rename(value = water_stress) %>%
+      mutate(variable = "Water Stress")
+  )
+
+# Generate a combined plot
+ggplot(final_combined_long, aes(x = year, y = value, color = variable)) +
+  geom_line() +          # Linee per ogni variabile
+  geom_point() +         # Punti per ogni anno
+  labs(title = "Time Series of SPEI and Water Stress (2015-2020)",
+       x = "Year",
+       y = "Value") +
+  theme_minimal()
+
+
 
 ##################################  Task 15  ###################################
 
 # Plot the time series of SPEI, water stress, and Agricultural GVA of each Serbian NUTS 3 region.
 
-# Supponiamo che le colonne del dataset siano:
-# SPEI_2015, SPEI_2016, ..., SPEI_2020 per SPEI
-# GVA_2015, GVA_2016, ..., GVA_2020 per Agricultural GVA
-# E una colonna "region" per le regioni NUTS 3
+final_sf <- shp3 %>%
+  select(NUTS_ID, agr_gva_2015,agr_gva_2016,agr_gva_2017,agr_gva_2018,
+         agr_gva_2019, agr_gva_2020,geometry) %>%
+  cbind(extracted_spei_shp3, water_stress_matrix) %>%
+  select(!ID)
 
-# Riorganizza il dataset in formato lungo per SPEI e GVA
-final_sf_long <- final_sf %>%
-  pivot_longer(cols = starts_with("SPEI_"), 
-               names_to = "year", 
-               values_to = "spei") %>%
-  mutate(year = as.numeric(gsub("SPEI_", "", year))) %>%
-  left_join(
-    final_sf %>%
-      pivot_longer(cols = starts_with("agr_gva_"), 
-                   names_to = "year_gva", 
-                   values_to = "gva") %>%
-      mutate(year_gva = as.numeric(gsub("agr_gva_", "", year_gva))),
-    by = c("region", "year" = "year_gva")
-  )
+# Reshape in long form the dataset without avereging by regiones
+final_SPEI_sf_long <- final_sf %>%
+  select(SPEI_2015, SPEI_2016, SPEI_2017, SPEI_2018, 
+         SPEI_2019, SPEI_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("SPEI_"),  # Seleziona tutte le colonne che iniziano con "SPEI_"
+               names_to = "year",             # Nome della nuova colonna per gli anni
+               values_to = "spei") 
 
-# Crea la serie temporale di SPEI e GVA per ciascuna regione
-ggplot(final_sf_long, aes(x = year)) +
-  geom_line(aes(y = spei, color = "SPEI"), size = 1) +         # Linea SPEI
-  geom_line(aes(y = gva, color = "Agricultural GVA"), size = 1) + # Linea GVA
-  facet_wrap(~ region, scales = "free_y") +                    # Facet per regione NUTS 3
-  labs(title = "Time Series of SPEI and Agricultural GVA (2015-2020)",
+# Rimuovi "SPEI_" dal nome dell'anno per ottenere solo il numero
+final_SPEI_sf_long <- final_SPEI_sf_long %>%
+  mutate(year = as.numeric(gsub("SPEI_", "", year)))
+
+final_water_sf_long <- final_sf %>%
+  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
+         water_stress_2019, water_stress_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("water_stress_"),  # Seleziona tutte le colonne che iniziano con "SPEI_" e "water_stress_"
+               names_to = "year",   
+               values_to = "water_stress")
+
+# Rimuovi "water_stress" dal nome dell'anno per ottenere solo il numero
+final_water_sf_long <- final_water_sf_long %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+
+final_agr_sf_long <- final_sf %>%
+  select(agr_gva_2015, agr_gva_2016, agr_gva_2017, agr_gva_2018, 
+         agr_gva_2019, agr_gva_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("agr_gva_"),
+               names_to = "year",
+               values_to = "agr_gva")
+
+# Rimuovi "agr_gva_" dal nome dell'anno per ottenere solo il numero
+final_agr_sf_long <- final_agr_sf_long %>%
+  mutate(year = as.numeric(gsub("agr_gva_", "", year)))
+
+# Merge the two datasets while preserving NUTS_ID
+final_combined_long <- final_SPEI_sf_long %>%
+  select(NUTS_ID, year, spei) %>%  # Includi NUTS_ID
+  rename(value = spei) %>%
+  mutate(variable = "SPEI") %>%
+  bind_rows(
+    final_water_sf_long %>%
+      select(NUTS_ID, year, water_stress) %>%  # Includi NUTS_ID
+      rename(value = water_stress) %>%
+      mutate(variable = "water stress")) %>%
+  bind_rows(
+    final_agr_sf_long %>%
+      select(NUTS_ID, year, agr_gva) %>%  # Includi NUTS_ID
+      rename(value = agr_gva) %>%
+      mutate(variable = "agr_gva")) %>%
+  arrange(NUTS_ID)
+  
+# Creare il grafico
+ggplot(final_combined_long, aes(x = year, y = value, color = variable)) +
+  geom_line() +  # Linee per le variabili
+  geom_point() +  # Punti per le osservazioni
+  facet_wrap(~ NUTS_ID, scales = "free_y") +  # Crea un grafico per ciascun NUTS_ID
+  labs(title = "Grafici per NUTS_ID",
        x = "Year",
-       y = "Value",
-       color = "Indicator") +
+       y = "Value") +
   theme_minimal() +
-  scale_color_manual(values = c("SPEI" = "blue", "Agricultural GVA" = "green"))
+  theme(legend.position = "bottom")
+
+# SPEI and water stress overlaps
 
 
 
+##################################  Task 16  ###################################
 
+# Plot a map showing the growth rate of SPEI from 2015 to 2020 of each Serbian
+# NUTS 3 region, in CRS 4326. 
+
+final_sf <- final_sf %>%
+  mutate(speigr = (SPEI_2020 - SPEI_2015) / SPEI_2015 * 100) 
+
+ggplot(data = final_sf) +
+  geom_sf(aes(fill = speigr), color = "black") +  # Fill by growth rate
+  scale_fill_viridis_c(option = "magma", name = "SPEI Growth Rate (%)") +  # Change color scale as needed
+  labs(title = "Growth Rate of SPEI from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")  # Adjust legend position
+
+# Since  SPEI (Standardized Precipitation-Evapotranspiration Index) 
+# riguarda principalmente condizioni di siccità o umidità, una scala che va da
+# colori "secchi" (ad esempio, marroni o gialli) a colori "umidi" ( viola blu) può funzionare bene per rendere l'idea.
+
+
+##################################  Task 17  ###################################
+
+# Plot a map showing the growth rate of the water stress index from 2015 to 2020 
+# of each Serbian NUTS3 region, in CRS 32634.
+
+final_sf_32634 <- final_sf %>%
+  st_transform(crs = 32634) %>%  # Imposta il CRS a 32634
+  mutate(wsgr = (water_stress_2020 - water_stress_2015) / water_stress_2015 * 100) 
+
+ggplot(data = final_sf_32634) +
+  geom_sf(aes(fill = wsgr), color = "black") +  # Fill by growth rate
+  scale_fill_viridis_c(option = "viridis", name = "water stress Growth Rate (%)") +  # Change color scale as needed
+  labs(title = "Growth Rate of water stress from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")  # Adjust legend position
+
+#Per una variabile come lo stress idrico, che rappresenta spesso una scala di gravità,
+# una scala viridis o cividis può funzionare bene, poiché permette una gradazione 
+# da valori bassi a elevati senza essere troppo intensa.
+
+# no great changing due to the CRS = 32634
+
+
+##################################  Task 18  ###################################
+
+# Plot a map showing the growth rate of Agricultural GVA from 2015 to 2020 of each Serbian NUTS 3
+# region, in CRS 3035. 
+
+final_sf_3035 <- final_sf %>%
+  st_transform(crs = 3035) %>%  # Imposta il CRS a 3035
+  mutate(agrgvagr = ( agr_gva_2020 - agr_gva_2015) / agr_gva_2015 * 100) 
+
+ggplot(data = final_sf_3035) +
+  geom_sf(aes(fill = agrgvagr), color = "black") +  # Fill by growth rate
+  scale_fill_viridis_c(option = "viridis", name = "Agricultural GVA Growth Rate (%)") +  # Change color scale as needed
+  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")  # Adjust legend position
+
+#  plot the map again using blue for regions experiencing a negative growth, lightblue
+#  for those having a growth rate between 0% and 5%, and white for regions with a growth rate >5%.
+
+# Categorizza il tasso di crescita in base ai range desiderati
+final_sf_3035 <- final_sf_3035 %>%
+  mutate(agrvagr_category = case_when(
+    agrgvagr < 0 ~ "Negative Growth",
+    agrgvagr >= 0 & agrgvagr <= 5 ~ "0-5% Growth",
+    agrgvagr > 5 ~ ">5% Growth"
+  ))
+
+# Crea la mappa con ggplot2
+ggplot(data = final_sf_3035) +
+  geom_sf(aes(fill = agrvagr_category), color = "black") +  # Colora in base alla categoria
+  scale_fill_manual(values = c("Negative Growth" = "blue", 
+                               "0-5% Growth" = "lightblue", 
+                               ">5% Growth" = "white"),
+                    name = "Agricultural GVA Growth Rate") +
+  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")  # Posiziona la legenda
+
+
+
+##################################  Task 19  ###################################
+
+
+# Let’s define a new dataset with monthly frequency. The study area is Europe and 
+# the dataset shows consumption, investment and GDP per capita for each NUTS 3 
+# region from 2015 to 2020. Could GDP per capita in one region be affected by 
+# the lagged investment in a neighboring region? How could you check it? 
+
+# NON HO CAPITO SE DOBBIAMO SCARICARCI UN NUOVO DATASET
+# Load the shapefile of European NUTS 3 regions, keep the NUTS 3 of Serbia, and call it “shp3”
+shp3 <- read_sf("data/NUTS_RG_01M_2021_4326_LEVL_3/NUTS_RG_01M_2021_4326_LEVL_3_repaired.shp")
+
+# Yes, it could be affected by neighbors country investment and a way to check it is through 
+# spatial autocorrelation tests such as Moran I test and generally speaking 
+# apply a spatial econometric approach that accounts for potential spatial dependencies over time. 
+# The several steps involve:
+# Dataset Setup: Ensure monthly data from 2015 to 2020 for GDP per capita, consumption, and investment in each NUTS 3 region
+# Lagged Variables: Create a lagged spatial variable for investment, which incorporates investment values from neighboring regions with a time lag.
+# Modeling Approach:
+##### SAR: Uses a spatial lag of GDP to capture dependency on neighboring regions.
+##### SDM: Tests both local effects and spillover effects from neighboring investments.
+# Testing Spatial Dependence: Use Moran’s I and Lagrange Multiplier tests to detect spatial autocorrelation, and consider spatial panel models for temporal and spatial effects.
+
+
+# -------------------------------- Section B: ----------------------------------
+# ******************************** Second Not Mandatory Tasks *******************
+
+# Using the “queen” criterion: two areas are connsidered affecting each other if they share a border
+
+# compute the Moran’s I Test for SPEI in 2015, and for Agricultural GVA in 2015
+
+final_sf <- st_make_valid(final_sf) # Useful to correct geometries!
+final_sf <- st_transform(final_sf, crs = 4326)
+
+# Spatial Lags
+k <- poly2nb(final_sf, row.names = final_sf$NUTS_ID)# liste di vicinanza tra ogni poligono
+k_weights <- nb2listw(k, style = "W") # does not work. Why? some island
+
+print(summary(k))
+final_sf2 <- final_sf[!(final_sf$NUTS_ID %in% c("Iceland", "Malta")), ]
+# Why is it necessary to exclude Iceland and Malta?
+k <- poly2nb(final_sf, row.names = final_sf$NUTS_ID)
+k_weights <- nb2listw(k, style = "W") # Converte la lista di vicinanza in pesi spaziali con peso 1
+#ogni peso rappresenta la proporzione della vicinanza rispetto al totale dei pesi degli altri vicini
+# The assignment is figure out which are the other criterion and describe them.
+
+# create centroids
+coords <- st_coordinates(st_centroid(st_geometry(final_sf))) #prendi le coordinate dei centroidi sopra le geometrie di final_sf2
+p <- plot(k, coords)
+
+# create Spatial Lags variable
+index_lag <- lag.listw(k_weights, final_sf$agr_gva_2015)
+
+# Hai effettuato un'analisi spaziale che include la creazione di una lista di 
+# vicinanza tra poligoni, la conversione di questa lista in pesi spaziali, il 
+# calcolo dei centroidi per visualizzarli, e infine la creazione di una variabile di lag spaziale. 
+
+# Is population spatially correlated across Europe?
+
+# Moran's I Test (with plot)
+# Moran's I test: measure the correlation between every observation with the 
+#                 neighboring ones. Set a decision rule and do the test.
+#                 without spatial correlation the estimate could be the bias.
+#                 >0 -> positive spatial autocorrelation if significant (p-value)
+# Moran's I Test
+moran1_agr2015 <- moran.test(final_sf$agr_gva_2015,k_weights)
+print(moran1_agr2015) #statistically significant with a practical value of 0.58 of autocorrelation
+
+
+# create a spatial autocorrelation scatterplot for the above-mentioned variables
+
+# Precompute scaled values
+final_sf <- final_sf %>%
+  mutate(agr_gva_2015_scaled = scale(agr_gva_2015),
+         index_lag_scaled = scale(index_lag))
+
+# Compute mean values for horizontal and vertical lines
+mean_agr_gva_2015_scaled <- mean(final_sf$agr_gva_2015_scaled, na.rm = TRUE)
+mean_index_lag_scaled <- mean(final_sf$index_lag_scaled, na.rm = TRUE)
+
+# Create the plot
+ggplot <- ggplot(final_sf) +
+  geom_point(aes(x = agr_gva_2015_scaled, y = index_lag_scaled, fill = NUTS_ID), shape = 22, size = 3, alpha = 0.8) +
+  geom_hline(yintercept = mean_index_lag_scaled, linetype = "dashed") +
+  geom_vline(xintercept = mean_agr_gva_2015_scaled, linetype = "dashed") +
+  geom_smooth(aes(x = agr_gva_2015_scaled, y = index_lag_scaled), method = "lm", color = "black") +
+  labs(x = "agr_gva_2015 (scaled)", y = "Lagged Index (scaled)", fill = "Country") +
+  theme_classic()
+ggplot
+
+# while Moran’s I can check for spatial autocorrelation, a spatial regression model is necessary to assess specific spatial lagged effects.
+# The Moran’s I test measures spatial autocorrelation, indicating whether a variable 
+# (e.g., GDP per capita) is clustered, dispersed, or randomly distributed across regions.
+# However, it doesn’t directly test the causal impact of a lagged variable in neighboring regions 
+# (like previous investment in one region on GDP in another).
+# To explore the effect of lagged investment in neighboring regions on GDP, a spatial lag model (SLM) 
+# or a spatial Durbin model (SDM) would be more appropriate. These models incorporate
+# spatially lagged independent variables, allowing for analysis of the potential 
+# impact of investment at t−1 in region j on GDP at t in region i.
+
+
+# -------------------------------- Section B: ----------------------------------
+# ******************************** Third Not Mandatory Task: *******************
+
+# Download Aqueduct gdb data: 
 
