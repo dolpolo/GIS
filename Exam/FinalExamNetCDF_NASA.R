@@ -43,7 +43,7 @@ conflict_prefer("filter", "dplyr")
 
 # -------------------------------- Section A: -------------------------------- #
 
-# Available the related PDF: 
+# Related PDF available in my GitHub account (https://github.com/dolpolo/GIS): 
 # A Monetary Policy Model for forecasting Optimal Euro Area Expansion
 
 
@@ -60,9 +60,8 @@ shp <- shp %>%
 
 # Load the shapefile of European NUTS 3 regions, keep the NUTS 3 of Serbia, and call it “shp3”
 shp3 <- read_sf("data/NUTS3/NUTS_RG_01M_2021_4326_LEVL_3_repaired.shp")
-# codice RS perché questo è il codice ISO 3166-1 alpha-2 assegnato alla Serbia
 shp3 <- shp3 %>%
-  filter( CNTR_CODE == "RS")
+  filter( CNTR_CODE == "RS") # ISO code 3166-1 alpha-2
 
 # Create a boundary box containing the shapefile of Serbia with a small margin.
 box <- st_bbox(shp)
@@ -313,7 +312,7 @@ avg_pop_den <- exact_extract(
   x = cropped_population_density,
   y = shp,
   fun = 'mean')
-avg_pop_den # 94.07967 persone per km^2
+avg_pop_den # 94.07967 people per km^2
 
 # Control the CRS of the two objects before proceding
 spei_data
@@ -433,8 +432,8 @@ final_SPEI_sf_long_avg <- final_SPEI_sf_long_avg %>%
 
 # generate the graph for the time series of SPEI from 2015 to 2020
 SPEI_avg_time_series <- ggplot(final_SPEI_sf_long_avg, aes(x = year, y = spei)) +
-  geom_line(color = "blue") +          # Linea di serie temporale
-  geom_point(color = "red") +           # Punti per ogni anno
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +       
   labs(title = "Time Series of SPEI (2015-2020)",
        x = "Year",
        y = "SPEI") +
@@ -444,7 +443,7 @@ SPEI_avg_time_series
 final_water_sf_long_avg <- final_sf_avg %>%
   select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
          water_stress_2019, water_stress_2020) %>%
-  pivot_longer(cols = starts_with("water_stress"),  # Seleziona tutte le colonne che iniziano con "SPEI_" e "water_stress_"
+  pivot_longer(cols = starts_with("water_stress"),  
                names_to = "year",   
                values_to = "water_stress")
 
@@ -454,8 +453,8 @@ final_water_sf_long_avg <- final_water_sf_long_avg %>%
 
 # generate the graph for the time series of water stress from 2015 to 2020
 water_avg_time_series <- ggplot(final_water_sf_long_avg, aes(x = year, y = water_stress)) +
-  geom_line(color = "blue") +          # Linea di serie temporale
-  geom_point(color = "red") +           # Punti per ogni anno
+  geom_line(color = "blue") +  
+  geom_point(color = "red") + 
   labs(title = "Time Series of water stress (2015-2020)",
        x = "Year",
        y = "water stress") +
@@ -476,8 +475,8 @@ final_combined_long_avg <- final_SPEI_sf_long_avg %>%
 
 # Generate a combined plot
 ggplot(final_combined_long_avg, aes(x = year, y = value, color = variable)) +
-  geom_line() +          # Linee per ogni variabile
-  geom_point() +         # Punti per ogni anno
+  geom_line() +     
+  geom_point() +      
   labs(title = "Time Series of SPEI and Water Stress (2015-2020)",
        x = "Year",
        y = "Value") +
@@ -506,7 +505,7 @@ final_SPEI_sf_long <- final_SPEI_sf_long %>%
 final_water_sf_long <- final_sf %>%
   select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
          water_stress_2019, water_stress_2020, NUTS_ID) %>%
-  pivot_longer(cols = starts_with("water_stress_"),  # Seleziona tutte le colonne che iniziano con "SPEI_" e "water_stress_"
+  pivot_longer(cols = starts_with("water_stress_"),  
                names_to = "year",   
                values_to = "water_stress")
 
@@ -756,21 +755,40 @@ ggplot
 
 # Download Aqueduct gdb data 
 
-# First check layers and choose just the layer "baseline_monthly" 
-layers <- st_layers("data/Aqueduct40_waterrisk_download_Y2023M07D05/GDB/Aq40_Y2023D07M05.gdb")
-print(layers)
+gdb_path <-"data/Aqueduct40_waterrisk/GDB/Aq40_Y2023D07M05.gdb"
+
+# First check layers and choose just the layer "baseline_annual" 
+gdb_layers <- st_layers("data/Aqueduct40_waterrisk/GDB/Aq40_Y2023D07M05.gdb")
+print(gdb_layers)
 
 # load data
-Aqueduct_gdb <- st_read("data/Aqueduct40_waterrisk_download_Y2023M07D05/GDB/Aq40_Y2023D07M05.gdb", layer = "baseline_monthly")
+Aqueduct_gdb <- st_read(gdb_path, layer = "baseline_annual")
 
-# Salva il dataset filtrato come shapefile
-st_write(Aqueduct_gdb, "Aqueduct_Serbia.shp")
+#Filter the data for Serbia using 'gid_0' column (assuming Serbia is labeled as "SRB" in 'gid_0')
+serbia_aqua_sf <- Aqueduct_gdb %>%
+  filter(gid_0 == "SRB")  # Adjust "SRB" if Serbia has a different code in the dataset
 
-# ==============================================================================
-crop_Aqueduct_gdb <- crop(Aqueduct_gdb, shp) # so we are cropping around the boundary box of pol
-# Filtra i dati per la Serbia (assicurati che il nome corrisponda a quello del dataset)
-serbia_data <- Aqueduct_gdb %>%
-  filter(gid_0 == "Serbia") %>%  # Filtra per il paese "Serbia"
-  filter(!is.na(value))           # Rimuove i valori NA, sostituisci 'value' con il nome della colonna che ti interessa
-#===============================================================================
+#Remove any rows with missing data to reduce computational burden
+serbia_aqua_sf <- serbia_aqua_sf %>%
+  drop_na()
 
+#Crop the Aqueduct data to Serbia's NUTS 3 shapefile shp3
+serbia_aqua_cropped <- st_intersection(serbia_aqua_sf, shp3)
+#Plot data
+plot(st_geometry(serbia_aqua_cropped))
+
+
+# Save the dataset filtered as a shape file
+# Specify the output path in the 'data' directory
+output_path <- "data/Aqueduct_Serbia.shp"
+
+# Delete the files if they already exist
+if (file.exists(output_path)) {
+  file.remove(output_path)
+  file.remove(sub(".shp$", ".shx", output_path))  # Remove associated .shx file
+  file.remove(sub(".shp$", ".dbf", output_path))  # Remove associated .dbf file
+  file.remove(sub(".shp$", ".prj", output_path))  # Remove associated .prj file (if exists)
+}
+
+# Save the file
+st_write(serbia_aqua_cropped, output_path)

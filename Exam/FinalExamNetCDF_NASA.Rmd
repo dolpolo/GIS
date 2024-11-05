@@ -1,7 +1,7 @@
 ---
 title: "NetCDF_NASA"
 author: "Davide Delfino, student ID 1126595"
-date: "2024-10-30"
+date: "2024-11-09"
 output:
   pdf_document:
     toc: yes
@@ -958,8 +958,8 @@ moran1_agr2015 <- moran.test(final_sf$agr_gva_2015,k_weights)
 print(moran1_agr2015) 
 ```
 COMMENT: 
-The Moran I test isstatistically significant with a practical value of 0.58 of autocorrelation
-
+The Moran's I test result of 0.58 indicates a moderately strong positive spatial autocorrelation.
+The spatial autocorrelation is statistically significant given a p-value of 4.234e-07.
 
 create a spatial autocorrelation scatterplot for the above-mentioned variables
 
@@ -1010,20 +1010,45 @@ layers <- st_layers("data/Aqueduct40_waterrisk/GDB/Aq40_Y2023D07M05.gdb")
 print(layers)
 ```
 
-load data for the baseline_monthly layer
+load data for the baseline_annual layer
 ```{r}
-Aqueduct_gdb <- st_read("data/Aqueduct40_waterrisk/GDB/Aq40_Y2023D07M05.gdb",
-                        layer = "baseline_monthly")
+gdb_path <-"data/Aqueduct40_waterrisk/GDB/Aq40_Y2023D07M05.gdb"
+Aqueduct_gdb <- st_read(gdb_path, layer = "baseline_annual")
 ```
+Filter the data for Serbia using 'gid_0' column (assuming Serbia is labeled as "SRB" in 'gid_0')
+```{r}
+serbia_aqua_sf <- Aqueduct_gdb %>%
+  filter(gid_0 == "SRB")
+```
+
+Remove any rows with missing data to reduce computational burden
+```{r}
+serbia_aqua_sf <- serbia_aqua_sf %>%
+  drop_na()
+```
+
+Crop the Aqueduct data to Serbia's NUTS 3 shapefile shp3
+```{r}
+serbia_aqua_cropped <- st_intersection(serbia_aqua_sf, shp3)
+#Plot data
+plot(st_geometry(serbia_aqua_cropped))
+```
+
 
 Save the dataset filtered as a shape file
 ```{r}
-# delate the file if it already exists
-if (file.exists("Aqueduct_Serbia.shp")) {
-    file.remove("Aqueduct_Serbia.shp")
+# Specify the output path in the 'data' directory
+output_path <- "data/Aqueduct_Serbia.shp"
+
+# Delete the files if they already exist
+if (file.exists(output_path)) {
+  file.remove(output_path)
+  file.remove(sub(".shp$", ".shx", output_path))  # Remove associated .shx file
+  file.remove(sub(".shp$", ".dbf", output_path))  # Remove associated .dbf file
+  file.remove(sub(".shp$", ".prj", output_path))  # Remove associated .prj file (if exists)
 }
 
 # Save the file
-st_write(Aqueduct_gdb, "Aqueduct_Serbia.shp")
+# st_write(serbia_aqua_cropped, "serbia_aqueduct_data.shp", delete_layer = TRUE)
 ```
 
