@@ -10,6 +10,7 @@
 /Assignment/NetCDF_NASA.Rmd
 Assignment/NetCDF_NASA.nb.html
 Assignment/NetCDF_NASA.pdf
+
 /Exam/data
 /Exam/FinalExamNetCDF_NASA.nb.html
 Exam/Aqueduct_Serbia.dbf
@@ -24,6 +25,9 @@ Exam/serbia_aqueduct_data.shp
 Exam/serbia_aqueduct_data.prj
 Exam/serbia_aqueduct_data.dbf
 
+/Exam_HRV/data
+/Exam_HRV/Final_exam_HRV
+/Exam_HRV/Rmd_Final_Exam_HRV.nb
 
 
 # History files
