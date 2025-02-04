@@ -10,11 +10,6 @@ path <- "C:/Users/david/Desktop/University/GIS/Exam_HRV"
 setwd(path)
 getwd()
 
-# Install Packages 
-# install.packages(c("sf", "spData", "tidyverse", "ggplot2", "osmdata", 
-#                   "rnaturalearth", "rnaturalearthdata", "grid", "readxl", 
-#                   "dplyr", "terra", "raster", "exactextractr", 
-#                   "spdep", "spatialreg"))
 
 # Load libraries
 library(sf)
@@ -33,6 +28,7 @@ library(exactextractr)
 library(spdep)
 library(spatialreg)
 library(conflicted)
+
 conflict_prefer("extract", "terra")
 conflict_prefer("filter", "dplyr")
 conflict_prefer("select", "dplyr")
@@ -56,89 +52,76 @@ conflict_prefer("select", "dplyr")
 
 ##################################  Task 1  ####################################
 
+# Load & Plot Croatia's NUTS 3 Regions with Bounding Box
 
-world <- ne_download(scale = 10, type = "countries", category = "cultural", returnclass = "sf")
-shp <- world %>% filter(SOVEREIGNT == "Croatia")
-plot(st_geometry(shp), main = "Croatia at 1:10m resolution")
+# Load Croatia's boundaries (world map)
+shp <- ne_download(scale = 10, type = "countries", category = "cultural", returnclass = "sf") %>%
+  filter(SOVEREIGNT == "Croatia")
 
-# Load NUTS3 data & keep the NUTS 3 of Croatia
-nuts_path <- "data/Natural_Earth/NUTS_RG_01M_2021_4326_LEVL_3_repaired.shp"
-nuts3 <- st_read(nuts_path)
-shp3 <- nuts3 %>% filter(CNTR_CODE == "HR")
+# Load NUTS3 data & filter Croatia
+shp3 <- st_read("data/Natural_Earth/NUTS_RG_01M_2021_4326_LEVL_3_repaired.shp") %>%
+  filter(CNTR_CODE == "HR")
 
-# Create a boundary box containing the shapefile of Croatia with a small margin.
-box <- st_bbox(shp)
-box <- box+c(-.5,-.5,.5,.5)
-box_sf <- st_as_sfc(box)
+# Create a bounding box with a margin
+box_sf <- st_as_sfc(st_bbox(shp) + c(-0.5, -0.5, 0.5, 0.5))
 
-# Plotting della figura con il bounding box
+# Plot Croatia, NUTS3 regions, and bounding box
 ggplot() +
   geom_sf(data = shp, fill = "lightblue", color = "grey40", size = 0.2) +
   geom_sf(data = shp3, fill = "palegreen", color = "grey30", size = 0.2) + 
-  geom_sf(data = box_sf, fill = NA, color = "red", linetype = "dashed",
-          size = 0.8) + 
+  geom_sf(data = box_sf, fill = NA, color = "red", linetype = "dashed", size = 0.8) + 
   theme_minimal() +
   theme(
-    panel.background = element_rect(fill = "aliceblue", color = NA),
-    panel.grid = element_blank(), # Rimuove la griglia
+    panel.background = element_rect(fill = "aliceblue"),
+    panel.grid = element_blank(),
     plot.title = element_text(hjust = 0.5, face = "bold", size = 16), 
-    plot.caption = element_text(hjust = 0.5, size = 10, face = "italic") 
+    plot.caption = element_text(hjust = 0.5, size = 10, face = "italic")
   ) +
-  labs(
-    title = " NUTS 3 Croatia",
-    caption = "Reference: Natural Earth"
-  )  
-
+  labs(title = "NUTS 3 Croatia", caption = "Reference: Natural Earth")
 
 ##################################  Task 2  ####################################
 
-#Load SPEI data: Standardized Precipitation Evapotranspiration Index
-spei_path <- "data/Climate_data/spei01.nc"
-r.spei <- rast(spei_path)
-r.spei 
+# Load & Crop SPEI Data (Climate Data)
 
-#Convert bbox to sf object for cropping
-bbox_HRV <- st_as_sf(box_sf) 
-#Crop the SPEI data around the boundary box of Croatia
-cropped_spei <- crop(r.spei, bbox_HRV)
+# Load SPEI raster data
+r.spei <- rast("data/Climate_data/spei01.nc")
 
-# Keep the last six layers
+# Crop the SPEI data using Croatia's bounding box
+cropped_spei <- crop(r.spei, st_as_sf(box_sf))
+
+# Keep the last 6 layers (corresponding to years of interest)
 reduced_spei <- cropped_spei[[1435:1440]]
 
 
 ##################################  Task 3  ####################################
 
-#Set seed for reproducibility
-set.seed(360)
+# Apply Random Weights to SPEI Layers
 
-# Generate a vector of 6 numbers from a uniform distribution (min = 0, max = 1)
-random_vector <- runif(6, min = 0, max = 1)
+set.seed(360)  # Ensure reproducibility
+random_vector <- runif(6)  # Generate 6 random values
 
-# Multiply the 6 SPEI layers by those random numbers
-for (i in 1:6) {
-  reduced_spei[[i]] <- reduced_spei[[i]] * random_vector[i]
-}
+# Multiply each layer by its corresponding random value
+reduced_spei <- lapply(1:6, function(i) reduced_spei[[i]] * random_vector[i]) |> rast()
 
 ##################################  Task 4  ####################################
 
-# Extract the grid points of the SPEI raster data. 
-points <- as.points(reduced_spei)
-points
-points_sf <- st_as_sf(points)
+# Convert raster layers to points
+points_sf <- as.points(reduced_spei) |> st_as_sf()
 
-# Generate the plot of points and overlap this onto the Croatian NUTS3 geometry
-ggplot()+
-  geom_sf(data = shp3, fill = "palegreen", color = "black") + 
-  geom_sf(data = points_sf, color = "red", size = 0.5) +  # Plot the grid points
+# Plot grid points over Croatian NUTS3 regions
+ggplot() +
+  geom_sf(data = shp3, fill = "palegreen", color = "black") +
+  geom_sf(data = points_sf, color = "red", size = 0.5) +
   theme_minimal() +
   labs(title = "Grid Points of the SPEI Raster Data in Croatian NUTS 3")
 
-#Generate the plot of points and overlap this onto the Croatian geometry
+# Plot grid points over Croatia boundary
 ggplot() +
-  geom_sf(data = shp, fill = "lightblue", color = "black") +  # Croatia boundary
-  geom_sf(data = points_sf, color = "red", size = 0.5) +  # Plot the grid points
+  geom_sf(data = shp, fill = "lightblue", color = "black") +
+  geom_sf(data = points_sf, color = "red", size = 0.5) +
   theme_minimal() +
   labs(title = "Grid Points of the SPEI Raster Data in Croatia")
+
 
 ##################################  Task 5  ####################################
 
@@ -148,7 +131,7 @@ r.pre <- rast(pre_path)
 r.pre 
 
 #Crop the SPEI data around the boundary box of Croatia
-cropped_pre <- crop(r.pre, bbox_HRV)
+cropped_pre <- crop(r.pre, box_sf)
 
 # Keep the last six layers
 reduced_pre <- cropped_pre[[475:480]]
@@ -175,94 +158,66 @@ print(r.pre_mean_annual)
 names(r.pre_mean_annual)
 names(r.pre_mean_annual) <- unique(format(time_vals[indices], "%Y"))
 #Crop the SPEI data around the boundary box of Croatia
-cropped_pre <- crop(r.pre_mean_annual, bbox_HRV)
+cropped_pre <- crop(r.pre_mean_annual, box_sf)
 plot(cropped_pre)
 
 
 ##################################  Task 6  ####################################
 
-#Load Acqueduct 4.0 shapefile
-aqueduct_path <- "data/Aqueduct_data/Aqueduct_baseline.shp"
-aqueduct_shapefile <- st_read(aqueduct_path)
+# Load Aqueduct 4.0 shapefile
+aqueduct_shapefile <- st_read("data/Aqueduct_data/Aqueduct_baseline.shp")
 
 
 ##################################  Task 7  ####################################
 
 set.seed(360)
 
-#Check the number of elements in the column 'bws_raw' (382)
-length(aqueduct_shapefile$bws_raw)
+# Extract water stress values for 2015
+aqueduct_shapefile$water_stress_2015 <- aqueduct_shapefile$bws_raw 
 
-#Assume 'bws_raw' is the water stress index of each watershed in 2015
-water_stress_2015 <- aqueduct_shapefile$bws_raw 
+# Generate random multipliers (mean = 1, sd = 1) for years 2016-2020
+multipliers <- matrix(rnorm(5 * nrow(aqueduct_shapefile), mean = 1, sd = 1), 
+                      nrow = nrow(aqueduct_shapefile), ncol = 5)
 
-#Add this vector to the Aqueduct shapefile
-aqueduct_shapefile$water_stress_2015 <- water_stress_2015
+# Compute water stress values for each year
+water_stress_ts <- aqueduct_shapefile$water_stress_2015 * multipliers
 
-# Generate a matrix of random multipliers for 5 years (2016 to 2020) for 382 elements
-multipliers <- matrix(rnorm(5 * 382, mean = 1, sd = 1), nrow = 382, ncol = 5)
-
-# Calculate the annual values by multiplying the 2015 values by the random multipliers
-water_stress_ts <- water_stress_2015 * multipliers
-
-# Add those attributes to the Aqueduct shapefile
-aqueduct_shapefile$water_stress_2016 <- water_stress_ts[, 1] # Values for 2016
-aqueduct_shapefile$water_stress_2017 <- water_stress_ts[, 2] # Values for 2017
-aqueduct_shapefile$water_stress_2018 <- water_stress_ts[, 3] # Values for 2018
-aqueduct_shapefile$water_stress_2019 <- water_stress_ts[, 4] # Values for 2019
-aqueduct_shapefile$water_stress_2020 <- water_stress_ts[, 5] # Values for 2020
+# Add calculated values as new columns
+years <- 2016:2020
+colnames(water_stress_ts) <- paste0("water_stress_", years)
+aqueduct_shapefile <- cbind(aqueduct_shapefile, water_stress_ts)
 
 ##################################  Task 8  ####################################
 
-# Definire il bounding box e la lista anni
+# Define bounding box and years list
 bbox_extent <- ext(vect(box_sf))
 years <- 2015:2020
-rasters <- list()
+rasters <- vector("list", length(years))
+names(rasters) <- as.character(years)
 
-# Loop per creare e rasterizzare ogni anno
+# Loop to create and rasterize each year's data
 for (year in years) {
-  raster <- rast(bbox_extent, ncol = 250, nrow = 250)
   field_name <- paste0("water_stress_", year)
-  raster <- rasterize(vect(aqueduct_shapefile), raster, field = field_name)
-  
-  # Crop e mask per limitare ai confini della Croazia
-  raster <- crop(raster, vect(shp))  # Ritaglia al confine della Croazia
-  raster <- mask(raster, vect(shp))  # Maschera per mantenere solo i dati interni
-  
-  rasters[[as.character(year)]] <- raster
+  raster <- rasterize(vect(aqueduct_shapefile), rast(bbox_extent, ncol = 250, nrow = 250), field = field_name)
+  rasters[[as.character(year)]] <- mask(crop(raster, vect(shp)), vect(shp))  # Crop and mask for Croatia
 }
 
-# Plot dei raster corretti (limitati ai confini della Croazia)
+# Plot raster maps for each year without printing extra lines in the console
 par(mfrow = c(2, 3))
-for (year in years) {
-  plot(rasters[[as.character(year)]], main = paste("Water Stress in Croatia -", year))
-}
+invisible(lapply(years, function(y) plot(rasters[[as.character(y)]], main = paste("Water Stress in Croatia -", y))))
 par(mfrow = c(1, 1))
 
-#Extract raster values to Serbia shapefile
-water_stress_2020_serbia <- exact_extract(rasters[[6]], shp, 'mean')
+# Extract raster values for Serbia and Serbian NUTS3 regions in 2020
+water_stress_2020_serbia <- exact_extract(rasters[["2020"]], shp, 'mean')
+water_stress_2020_nuts3 <- exact_extract(rasters[["2020"]], shp3, 'mean')
 
-#Extract raster values to Serbian NUTS3 shapefile
-water_stress_2020_nuts3 <- exact_extract(rasters[[6]], shp3, 'mean')
-
-# What is the average water stress level in Serbia in 2020? Is this value equal 
-# to the simple average of water stress in Serbian NUTS 3 districts?
-
-#Calculate average water stress in Serbia for 2020: 0.42
+# Compute average water stress levels
 avg_water_stress_2020_serbia <- mean(water_stress_2020_serbia, na.rm = TRUE)
-avg_water_stress_2020_serbia
-
-
-#Calculate average water stress in Serbian NUTS3 regions for 2020: 0.41
 avg_water_stress_2020_nuts3 <- mean(water_stress_2020_nuts3, na.rm = TRUE)
-avg_water_stress_2020_nuts3
 
-#Extract raster values to Serbian NUTS3 shapefile and stor it into columns
-water_stress_2015_nuts3 <- exact_extract(rasters[[1]], shp3, 'mean')
-water_stress_2016_nuts3 <- exact_extract(rasters[[2]], shp3, 'mean')
-water_stress_2017_nuts3 <- exact_extract(rasters[[3]], shp3, 'mean')
-water_stress_2018_nuts3 <- exact_extract(rasters[[4]], shp3, 'mean')
-water_stress_2019_nuts3 <- exact_extract(rasters[[5]], shp3, 'mean')
+# Extract raster values for Serbian NUTS3 regions (2015-2020)
+water_stress_matrix <- do.call(cbind, lapply(years, function(y) exact_extract(rasters[[as.character(y)]], shp3, 'mean')))
+colnames(water_stress_matrix) <- paste0("water_stress_", years)
 
 # Initialize an empty list to store water stress values for each year
 years <- 2015:2020
@@ -273,55 +228,43 @@ for (i in seq_along(years)) {
   water_stress_list[[i]] <- exact_extract(rasters[[i]], shp3, 'mean')
 }
 
-# Combine the list into a matrix or data frame, with each column named by the respective year
-water_stress_matrix <- do.call(cbind, water_stress_list)
-colnames(water_stress_matrix) <- paste0("water_stress_", years) 
-
-
 ##################################  Task 9  ####################################
 
-#Load the population density data for 2015
+# Load population density data for 2015
 pop_path <- "data/Population_data/gpw_v4_population_density_rev11_2015_15_min.asc"
 r.pop <- rast(pop_path)
-r.pop
 
-#Crop the population density data to the bounding box of Croatia
+# Crop to Croatia's bounding box
 cropped_pop <- crop(r.pop, box_sf)
 
-#Calculate the average population density in Croatia (before resampling): 94.56521
-avg_pop_density_before <- exact_extract(cropped_pop, shp, 'mean')
-avg_pop_density_before <- mean(avg_pop_density_before, na.rm = TRUE)
-avg_pop_density_before  
+# Calculate average population density in Croatia before resampling
+avg_pop_density_before <- mean(exact_extract(cropped_pop, shp, 'mean'), na.rm = TRUE)
 
-#Resample the population data to match the resolution of SPEI data using bilinear method
+# Resample to match SPEI resolution using bilinear interpolation
 resampled_pop <- resample(cropped_pop, reduced_spei[[1]], method = "bilinear")
 
-# Calculate the average population density in Croatia (after resampling): 95.99534
-avg_pop_density_after <- exact_extract(resampled_pop, shp, 'mean')
-avg_pop_density_after <- mean(avg_pop_density_after, na.rm = TRUE)
-avg_pop_density_after 
+# Calculate average population density after resampling
+avg_pop_density_after <- mean(exact_extract(resampled_pop, shp, 'mean'), na.rm = TRUE)
 
-#Plot the original and resampled population density data
+# Plot original and resampled population density data
+par(mfrow = c(1, 2))
 plot(cropped_pop, main = "Population Density in Croatia - 2015 (Original)")
-plot(shp3$geometry,add = T)
-
+plot(shp3$geometry, add = TRUE)
 plot(resampled_pop, main = "Population Density in Croatia - 2015 (Resampled)")
-plot(shp3$geometry,add = T)
+plot(shp3$geometry, add = TRUE)
+par(mfrow = c(1, 1))
 
+# Summary of changes
+cat("Before resampling, the average population density in Croatia was:", avg_pop_density_before, "\n")
+cat("After resampling, the average population density in Croatia is:", avg_pop_density_after, "\n")
+cat("Resampling slightly altered the average population density due to bilinear interpolation, which adjusts values based on neighboring cells.")
 
-#Is the Croatian average population density changed? Discuss this shortly (a few lines).
-#   Before resampling the avarage population density in Croatia amounts to 75.59355. Resampling 
-#   using the bilinear method, decrised slightly to 75.38249 the avarage population. The
-#   bilinear interpolation, changing the resolution, laverages more the more common grids.
+# -------------------------------- Section B: ----------------------------------
 
-
-# -------------------------------- Section B: -------------------------------- #
-
-# ************************* First Not Mandatory Tasks **************************
-
+# ******************************** First Not Mandatory Tasks *******************
 
 # create a population-weighted version of SPEI and water stress data using the 
-# gridded data of population density. 
+# gridded data of population density.
 
 # Calculate the average population density in Serbia
 pop_density_Croatia <- exact_extract(resampled_pop, shp, 'mean')
@@ -342,14 +285,31 @@ for (i in seq_along(years)) {
 }
 par(mfrow = c(1, 1))
 
+# Same for water stress index
+water_stress_weighted_list <- list()
+par(mfrow = c(2, 3))
+for (i in seq_along(years)) {
+  water_stress_weighted_list[[i]] <- water_stress_list[[i]] * pop_density_ratio
+  plot(water_stress_weighted_list[[i]], main = paste("Population-weighted water-stress for", years[i]))
+}
+par(mfrow = c(1, 1))
 
+
+# Same for precipitation data
+precipitation_weigthed_list <- list()
+par(mfrow = c(2, 3))
+for (i in seq_along(years)) {
+  precipitation_weigthed_list[[i]] <- reduced_pre[[i]] * pop_density_ratio
+  plot(precipitation_weigthed_list[[i]], main = paste("Population-weighted precipitation for", years[i]))
+}
+par(mfrow = c(1, 1))
 ##################################  Task 10  ###################################
 
-# Is it relevant to use population-weighted climate variables when analyzing GDP data? Are they relevant when investigating Agricultural GVA or Agricultural yields? And what about Industrial GVA? Discuss this shortly
+# Is it relevant to use population-weighted climate variables when analyzing GDP data? Are they relevant when investigating Construction GVA or Construction yields? And what about Industrial GVA? Discuss this shortly
 # Using population-weighted climate variables can be relevant in analyzing GDP data, particularly for understanding climate's impact across different sectors. By adjusting climate data based on population distribution, we can better assess how climate affects economic activity, especially in densely populated regions.
-# In the agricultural sector, where production is often concentrated in specific areas, population-weighting can provide valuable insights into how climatic variations influence productivity and economic outcomes. For instance, understanding how temperature and precipitation affect crop yields in regions with higher population density can inform agricultural policies and economic forecasts.
+# In the Construction sector, where production is often concentrated in specific areas, population-weighting can provide valuable insights into how climatic variations influence productivity and economic outcomes. For instance, understanding how temperature and precipitation affect crop yields in regions with higher population density can inform Construction policies and economic forecasts.
 # In contrast, the relevance of population-weighted climate variables in industrial GVA may be less pronounced. Industrial activities often occur in diverse geographical areas that do not necessarily align with population densities, making climate impacts more complex. Industries can be located in regions with varying climatic conditions, thus diminishing the utility of population-weighted analysis.
-# Overall, while population-weighted climate variables are crucial for understanding agricultural impacts, their relevance for industrial analysis is limited due to the nature of industrial location and climate interaction.
+# Overall, while population-weighted climate variables are crucial for understanding Construction impacts, their relevance for industrial analysis is limited due to the nature of industrial location and climate interaction.
 
 ##################################  Task 11  ###################################
 
@@ -358,256 +318,192 @@ par(mfrow = c(1, 1))
 # is preferred, as it averages values over relevant spatial units, yielding a more accurate
 # population-weighted SPEI index that reflects actual climate impacts on populated areas
 
-
-
 ##################################  Task 12  ###################################
 
+# Load Croatian Hours Worked Data (Sector F)
 Hours_worked_path <- "data/Urban_data/Hours_Worked.csv"
-Croatian_Hours_worked <- read_csv(Hours_worked_path, show_col_types = FALSE)
-Croatian_Hours_worked <- Croatian_Hours_worked %>%
+Croatian_Hours_worked <- read_csv(Hours_worked_path, show_col_types = FALSE) %>%
   filter(SECTOR == "F") %>%
-  select(TERRITORY_ID, SECTOR, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
+  select(TERRITORY_ID, SECTOR, `2015`:`2020`) %>%
   rename(NUTS_ID = TERRITORY_ID) %>%
   rename_with(~ paste0("HW_", .), starts_with("20"))
 
-#Load Croatian gva sector a data (Sheet 2)
+# Load Croatian GVA Data (Sheet 2)
 Croatiangva_path <- "data/Urban_data/ARDECO_SUVGZ.csv"
-Croatian_GVA <- read_csv(Croatiangva_path,show_col_types = FALSE)
-Croatian_GVA <- Croatian_GVA %>%
-  select(TERRITORY_ID, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
-  rename(NUTS_ID = TERRITORY_ID)%>%
-  rename_with(~ paste0("agr_gva_", .), starts_with("20"))
+Croatian_GVA <- read_csv(Croatiangva_path, show_col_types = FALSE) %>%
+  filter(SECTOR == "F") %>%
+  filter(UNIT == "Million EUR" ) %>%
+  select(TERRITORY_ID, `2015`:`2020`) %>%
+  rename(NUTS_ID = TERRITORY_ID) %>%
+  rename_with(~ paste0("cnst_gva_", .), starts_with("20"))
 
-#Merge shp3 and Croatian_GVA
-shp3_merged = shp3 %>%
+
+# Rename Iso to match the current nomenclature
+
+Croatian_GVA <- Croatian_GVA %>% 
+mutate(NUTS_ID = str_replace_all(NUTS_ID, c("HR047" = "HR021", 
+                                              "HR048" = "HR022",
+                                              "HR049" = "HR023", 
+                                              "HR04A" = "HR024", 
+                                              "HR04B" = "HR025",
+                                              "HR04C" = "HR026", 
+                                              "HR04D" = "HR027", 
+                                              "HR04E" = "HR028", 
+                                              "HR041" = "HR050", 
+                                              "HR046" = "HR061", 
+                                              "HR044" = "HR062", 
+                                              "HR045" = "HR063", 
+                                              "HR043" = "HR064", 
+                                              "HR042" = "HR065")))
+
+# Merge shp3 with Croatian Hours Worked & GVA Data
+shp3_merged <- shp3 %>%
   left_join(Croatian_Hours_worked, by = "NUTS_ID") %>%
   left_join(Croatian_GVA, by = "NUTS_ID")
 
-shp3_merged = shp3_merged[!duplicated(shp3_merged$NUTS_ID), ]
-
-
 ##################################  Task 13  ###################################
 
+# Extract SPEI data for Serbia and regions
+extracted_spei <- list(
+  shp = extract(reduced_spei, shp, fun = mean, na.rm = TRUE),
+  shp3 = extract(reduced_spei, shp3, fun = mean, na.rm = TRUE)
+)
 
-# Generate a new simple feature object called “final_sf” whose features are the 
-# Serbian NUTS 3 polygons and whose fields are the average values of SPEI,
-# water stress, and Construction  GVA in each considered year. 
+extracted_pre <- list(
+  shp = extract(reduced_pre, shp, fun = mean, na.rm = TRUE),
+  shp3 = extract(reduced_pre, shp3, fun = mean, na.rm = TRUE)
+)
 
-# Extraxt spei data from "shp": just Serbia
-extracted_spei_shp <- extract(reduced_spei, shp, fun=mean, na.rm=TRUE)
-# Extraxt spei data from "shp3": all regions in Serbia
-extracted_spei_shp3 <- extract(reduced_spei, shp3, fun=mean, na.rm=TRUE)
+extracted_pre <- extracted_pre$shp3 %>% select(-ID)
 
+# Merge all data into 'final_sf' and rename SPEI columns
 final_sf <- shp3_merged %>%
-  select(NUTS_ID, agr_gva_2015,agr_gva_2016,agr_gva_2017,agr_gva_2018,
-         agr_gva_2019, agr_gva_2020,geometry) %>%
-  cbind(extracted_spei_shp3, water_stress_matrix) %>%
-  select(!ID)
+  select(NUTS_ID, starts_with("cnst_gva"), geometry) %>%
+  bind_cols(extracted_spei$shp3, water_stress_matrix, extracted_pre) %>%
+  select(-ID) %>%
+  rename_with(~paste0("SPEI_", 2015:2020), starts_with("spei_")) %>%
+  rename_with(~paste0("pre_", 2015:2020), starts_with("maea_"))
 
-final_sf <- final_sf %>%
-  rename(
-    SPEI_2015 = spei_1435,
-    SPEI_2016 = spei_1436,
-    SPEI_2017 = spei_1437,
-    SPEI_2018 = spei_1438,
-    SPEI_2019 = spei_1439,
-    SPEI_2020 = spei_1440
-  )
-
-# compute the avereges for each variable
+# Compute averages for all numeric columns
 final_sf_avg <- final_sf %>%
-  summarise(dplyr::across(where(is.numeric), mean, na.rm = TRUE))
-
+  summarise(across(where(is.numeric), mean, na.rm = TRUE))
 
 ##################################  Task 14  ###################################
 
-# Plot the time series of SPEI and water stress in Serbia from 2015 to 2020.
-
-# Reshape in long form the dataset
+# Reshape the data for SPEI and Water Stress
 final_SPEI_sf_long_avg <- final_sf_avg %>%
-  pivot_longer(cols = starts_with("SPEI_"), 
-               names_to = "year",             
-               values_to = "spei")  
-
-# Remove "SPEI_"from the year name and leave just the number
-final_SPEI_sf_long_avg <- final_SPEI_sf_long_avg %>%
-  mutate(year = as.numeric(gsub("SPEI_", "", year)))
-
-# generate the graph for the time series of SPEI from 2015 to 2020
-SPEI_avg_time_series <- ggplot(final_SPEI_sf_long_avg, aes(x = year, y = spei)) +
-  geom_line(color = "blue") +        
-  geom_point(color = "red") +       
-  labs(title = "Time Series of SPEI (2015-2020)",
-       x = "Year",
-       y = "SPEI") +
-  theme_minimal()
-SPEI_avg_time_series
+  pivot_longer(cols = starts_with("SPEI_"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("SPEI_", "", year)), variable = "SPEI")
 
 final_water_sf_long_avg <- final_sf_avg %>%
-  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
-         water_stress_2019, water_stress_2020) %>%
-  pivot_longer(cols = starts_with("water_stress"),  
-               names_to = "year",   
-               values_to = "water_stress")
+  pivot_longer(cols = starts_with("water_stress"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)), variable = "Water Stress")
 
-# Remove "water_stress_" from the year name and leave just the number
-final_water_sf_long_avg <- final_water_sf_long_avg %>%
-  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+# Combine the two datasets into one
+final_combined_long_avg <- bind_rows(final_SPEI_sf_long_avg, final_water_sf_long_avg)
 
-# generate the graph for the time series of water stress from 2015 to 2020
-water_avg_time_series <- ggplot(final_water_sf_long_avg, aes(x = year, y = water_stress)) +
-  geom_line(color = "blue") +  
-  geom_point(color = "red") + 
-  labs(title = "Time Series of water stress (2015-2020)",
-       x = "Year",
-       y = "water stress") +
-  theme_minimal()
-water_avg_time_series
-
-# merge the two datasets
-final_combined_long_avg <- final_SPEI_sf_long_avg %>%
-  select(year, spei) %>%
-  rename(value = spei) %>%
-  mutate(variable = "SPEI") %>%
-  bind_rows(
-    final_water_sf_long_avg %>%
-      select(year, water_stress) %>%
-      rename(value = water_stress) %>%
-      mutate(variable = "Water Stress")
-  )
-
-# Generate a combined plot
+# Generate the combined plot
 ggplot(final_combined_long_avg, aes(x = year, y = value, color = variable)) +
   geom_line() +     
   geom_point() +      
-  labs(title = "Time Series of SPEI and Water Stress (2015-2020)",
-       x = "Year",
-       y = "Value") +
+  labs(title = "Time Series of SPEI and Water Stress (2015-2020)", x = "Year", y = "Value") +
   theme_minimal()
-
 
 ##################################  Task 15  ###################################
 
-# Plot the time series of SPEI, water stress, and Agricultural GVA of each Croatian NUTS 3 region.
-
-# Reshape in long form the dataset without avereging by regiones
+# Reshape the data for SPEI, water stress, and Construction GVA
 final_SPEI_sf_long <- final_sf %>%
-  select(SPEI_2015, SPEI_2016, SPEI_2017, SPEI_2018, 
-         SPEI_2019, SPEI_2020, NUTS_ID) %>%
-  pivot_longer(cols = starts_with("SPEI_"), 
-               names_to = "year",           
-               values_to = "spei") 
-
-# Remove "SPEI_" from the year name and leave just the number
-final_SPEI_sf_long <- final_SPEI_sf_long %>%
-  mutate(year = as.numeric(gsub("SPEI_", "", year)))
+  select(starts_with("SPEI_"), NUTS_ID) %>%
+  pivot_longer(cols = starts_with("SPEI_"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("SPEI_", "", year)), variable = "SPEI")
 
 final_water_sf_long <- final_sf %>%
-  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
-         water_stress_2019, water_stress_2020, NUTS_ID) %>%
-  pivot_longer(cols = starts_with("water_stress_"),  
-               names_to = "year",   
-               values_to = "water_stress")
+  select(starts_with("water_stress_"), NUTS_ID) %>%
+  pivot_longer(cols = starts_with("water_stress_"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)), variable = "Water Stress")
 
-# Remove "water_stress_" from the year name and leave just the number
-final_water_sf_long <- final_water_sf_long %>%
-  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+final_pre_sf_long <- final_sf %>%
+  select(starts_with("pre_"), NUTS_ID) %>%
+  pivot_longer(cols = starts_with("pre_"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("pre_", "", year)), variable = "Precipitation")
 
-final_agr_sf_long <- final_sf %>%
-  select(agr_gva_2015, agr_gva_2016, agr_gva_2017, agr_gva_2018, 
-         agr_gva_2019, agr_gva_2020, NUTS_ID) %>%
-  pivot_longer(cols = starts_with("agr_gva_"),
-               names_to = "year",
-               values_to = "agr_gva")
+final_cnst_sf_long <- final_sf %>%
+  select(starts_with("cnst_gva_"), NUTS_ID) %>%
+  pivot_longer(cols = starts_with("cnst_gva_"), names_to = "year", values_to = "value") %>%
+  mutate(year = as.numeric(gsub("cnst_gva_", "", year)), variable = "Construction GVA")
 
-# Remove "agr_gva_" from the year name and leave just the number
-final_agr_sf_long <- final_agr_sf_long %>%
-  mutate(year = as.numeric(gsub("agr_gva_", "", year)))
-
-# Merge the two datasets while preserving NUTS_ID
-final_combined_long <- final_SPEI_sf_long %>%
-  select(NUTS_ID, year, spei) %>% 
-  rename(value = spei) %>%
-  mutate(variable = "SPEI") %>%
-  bind_rows(
-    final_water_sf_long %>%
-      select(NUTS_ID, year, water_stress) %>% 
-      rename(value = water_stress) %>%
-      mutate(variable = "water stress")) %>%
-  bind_rows(
-    final_agr_sf_long %>%
-      select(NUTS_ID, year, agr_gva) %>%
-      rename(value = agr_gva) %>%
-      mutate(variable = "agr_gva")) %>%
+# Combine the datasets into one
+final_combined_long <- bind_rows(final_SPEI_sf_long, final_water_sf_long, 
+                                 final_cnst_sf_long, final_pre_sf_long) %>%
   arrange(NUTS_ID)
 
-# Generate a combined plot
+# Generate the combined plot
 ggplot(final_combined_long, aes(x = year, y = value, color = variable)) +
   geom_line() + 
   geom_point() +
   facet_wrap(~ NUTS_ID, scales = "free_y") + 
-  labs(title = "Grafici per NUTS_ID",
-       x = "Year",
-       y = "Value") +
+  labs(title = "Time Series for each NUTS_ID", x = "Year", y = "Value") +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-# SPEI and water stress overlaps
-
 ##################################  Task 16  ###################################
 
-# Plot a map showing the growth rate of SPEI from 2015 to 2020 of each Serbian
-# NUTS 3 region, in CRS 4326. 
-
+# Calculate the growth rate of SPEI and Water Stress
 final_sf <- final_sf %>%
-  mutate(speigr = (SPEI_2020 - SPEI_2015) / SPEI_2015 * 100) 
+  mutate(
+    speigr = (SPEI_2020 - SPEI_2015) / SPEI_2015 * 100, 
+    wsgr = (water_stress_2020 - water_stress_2015) / water_stress_2015 * 100,
+    pregr = (pre_2020 - pre_2015) / pre_2015 * 100
+  )
 
+# Plot SPEI Growth Rate
 ggplot(data = final_sf) +
   geom_sf(aes(fill = speigr), color = "black") +  
   scale_fill_viridis_c(option = "magma", name = "SPEI Growth Rate (%)") + 
-  labs(title = "Growth Rate of SPEI from 2015 to 2020 in Serbian NUTS 3 Regions",
+  labs(
+    title = "Growth Rate of SPEI from 2015 to 2020 in Serbian NUTS 3 Regions",
+    subtitle = "Percentage Growth Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Plot water stress Growth Rate
+ggplot(data = final_sf) +
+  geom_sf(aes(fill = wsgr), color = "black") +  
+  scale_fill_viridis_c(option = "viridis", name = "water stress Growth Rate (%)") +  
+  labs(title = "Growth Rate of water stress from 2015 to 2020 in Serbian NUTS 3 Regions",
        subtitle = "Percentage Growth Rate") +
   theme_minimal() +
   theme(legend.position = "right")
 
-
-# Plot a map showing the growth rate of Water stess from 2015 to 2020 of each Serbian
-# NUTS 3 region, in CRS 4326. 
-
-final_sf <- final_sf %>%
-  mutate(wsgr = (water_stress_2020 - water_stress_2015) / water_stress_2015)
-
-# Plot water stress growth rate
-ggplot(data = final_sf) +
-  geom_sf(aes(fill = wsgr), color = "white", size = 0.1) +
-  scale_fill_gradient2(
-    low = "blue", mid = "green", high = "red", 
-    midpoint = 0, na.value = "grey50", 
-    name = "Growth Rate of water stress"
-  ) +
-  labs(
-    title = "Growth Rate of water stress (2015 to 2020) in Croatian NUTS 3 Regions"  ) +
-  theme_minimal() +
-  theme(legend.position = "bottom") +
-  coord_sf(crs = 32634)
-
 ##################################  Task 17  ###################################
-# BISOGNA METTERE IL PRECIPITATION INDEX
+
+
+# Plot SPEI Growth Rate
+ggplot(data = final_sf) +
+  geom_sf(aes(fill = pregr), color = "black") +  
+  scale_fill_viridis_c(option = "rocket", name = "SPEI Growth Rate (%)") + 
+  labs(
+    title = "Growth Rate of Precipitation from 2015 to 2020 in Croatian NUTS 3 Regions",
+    subtitle = "Percentage Growth Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
 
 
 ##################################  Task 18  ###################################
 
-# Plot a map showing the growth rate of Agricultural GVA from 2015 to 2020 of each Serbian NUTS 3
+# Plot a map showing the growth rate of Construction GVA from 2015 to 2020 of each Serbian NUTS 3
 # region, in CRS 3035. 
 
 final_sf_3035 <- final_sf %>%
   st_transform(crs = 3035) %>%  # Imposta il CRS a 3035
-  mutate(agrgvagr = ( agr_gva_2020 - agr_gva_2015) / agr_gva_2015 * 100) 
+  mutate(cnstgvcnst = ( cnst_gva_2020 - cnst_gva_2015) / cnst_gva_2015 * 100) 
 
 ggplot(data = final_sf_3035) +
-  geom_sf(aes(fill = agrgvagr), color = "black") +  
-  scale_fill_viridis_c(option = "viridis", name = "Agricultural GVA Growth Rate (%)") + 
-  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+  geom_sf(aes(fill = cnstgvcnst), color = "black") +  
+  scale_fill_viridis_c(option = "viridis", name = "Construction GVA Growth Rate (%)") + 
+  labs(title = "Growth Rate of Construction GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
        subtitle = "Percentage Growth Rate") +
   theme_minimal() +
   theme(legend.position = "right")
@@ -617,24 +513,43 @@ ggplot(data = final_sf_3035) +
 
 # divide growth rates in cathegories
 final_sf_3035 <- final_sf_3035 %>%
-  mutate(agrvagr_category = case_when(
-    agrgvagr < 0 ~ "Negative Growth",
-    agrgvagr >= 0 & agrgvagr <= 5 ~ "0-5% Growth",
-    agrgvagr > 5 ~ ">5% Growth"
+  mutate(cnstvcnst_category = case_when(
+    cnstgvcnst < 0 ~ "Negative Growth",
+    cnstgvcnst >= 0 & cnstgvcnst <= 5 ~ "0-5% Growth",
+    cnstgvcnst > 5 ~ ">5% Growth"
   ))
 
 # generate the same grapth with the bin colours setted above
 ggplot(data = final_sf_3035) +
-  geom_sf(aes(fill = agrvagr_category), color = "black") +  # Colora in base alla categoria
+  geom_sf(aes(fill = cnstvcnst_category), color = "black") +  # Colora in base alla categoria
   scale_fill_manual(values = c("Negative Growth" = "blue", 
                                "0-5% Growth" = "lightblue", 
                                ">5% Growth" = "white"),
-                    name = "Agricultural GVA Growth Rate") +
-  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+                    name = "Construction GVA Growth Rate") +
+  labs(title = "Growth Rate of Construction GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
        subtitle = "Percentage Growth Rate") +
   theme_minimal() +
   theme(legend.position = "right")  
 
+# divide growth rates in cathegories
+final_sf_3035 <- final_sf_3035 %>%
+  mutate(cnstvcnst_category = case_when(
+    cnstgvcnst < 25 ~ "0-25%",
+    cnstgvcnst >= 25 & cnstgvcnst <= 50 ~ "25-50% Growth",
+    cnstgvcnst > 50 ~ ">50% Growth"
+  ))
+
+# generate the same grapth with the bin colours setted above
+ggplot(data = final_sf_3035) +
+  geom_sf(aes(fill = cnstvcnst_category), color = "black") +  # Colora in base alla categoria
+  scale_fill_manual(values = c("0-25%" = "blue", 
+                               "25-50% Growth" = "lightblue", 
+                               ">50% Growth" = "white"),
+                    name = "Construction GVA Growth Rate") +
+  labs(title = "Growth Rate of Construction GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")  
 
 ##################################  Task 19  ###################################
 
@@ -649,7 +564,7 @@ ggplot(data = final_sf_3035) +
 
 # Using the “queen” criterion
 
-# compute the Moran’s I Test for SPEI in 2015, and for Agricultural GVA in 2015
+# compute the Moran’s I Test for SPEI in 2015, and for Construction GVA in 2015
 
 final_sf <- st_make_valid(final_sf) # Useful to correct geometries!
 final_sf <- st_transform(final_sf, crs = 4326)
@@ -665,34 +580,33 @@ coords <- st_coordinates(st_centroid(st_geometry(final_sf)))
 p <- plot(k, coords)
 
 # create Spatial Lags variable
-index_lag <- lag.listw(k_weights, final_sf$agr_gva_2015)
-
+index_lag <- lag.listw(k_weights, final_sf$cnst_gva_2015)
 
 # Is population spatially correlated across Europe?
 
 # Moran's I Test
-moran1_agr2015 <- moran.test(final_sf$agr_gva_2015,k_weights)
-print(moran1_agr2015) #statistically significant with a practical value of 0.58 of autocorrelation
+moran1_cnst2015 <- moran.test(final_sf$cnst_gva_2015,k_weights)
+print(moran1_cnst2015) #statistically significant with a practical value of 0.74 of autocorrelation
 
 
 # create a spatial autocorrelation scatterplot for the above-mentioned variables
 
 # Precompute scaled values
 final_sf <- final_sf %>%
-  mutate(agr_gva_2015_scaled = scale(agr_gva_2015),
+  mutate(cnst_gva_2015_scaled = scale(cnst_gva_2015),
          index_lag_scaled = scale(index_lag))
 
 # Compute mean values for horizontal and vertical lines
-mean_agr_gva_2015_scaled <- mean(final_sf$agr_gva_2015_scaled, na.rm = TRUE)
+mean_cnst_gva_2015_scaled <- mean(final_sf$cnst_gva_2015_scaled, na.rm = TRUE)
 mean_index_lag_scaled <- mean(final_sf$index_lag_scaled, na.rm = TRUE)
 
 # Create the plot
 ggplot <- ggplot(final_sf) +
-  geom_point(aes(x = agr_gva_2015_scaled, y = index_lag_scaled, fill = NUTS_ID), shape = 22, size = 3, alpha = 0.8) +
+  geom_point(aes(x = cnst_gva_2015_scaled, y = index_lag_scaled, fill = NUTS_ID), shape = 22, size = 3, alpha = 0.8) +
   geom_hline(yintercept = mean_index_lag_scaled, linetype = "dashed") +
-  geom_vline(xintercept = mean_agr_gva_2015_scaled, linetype = "dashed") +
-  geom_smooth(aes(x = agr_gva_2015_scaled, y = index_lag_scaled), method = "lm", color = "black") +
-  labs(x = "agr_gva_2015 (scaled)", y = "Lagged Index (scaled)", fill = "Country") +
+  geom_vline(xintercept = mean_cnst_gva_2015_scaled, linetype = "dashed") +
+  geom_smooth(aes(x = cnst_gva_2015_scaled, y = index_lag_scaled), method = "lm", color = "black") +
+  labs(x = "cnst_gva_2015 (scaled)", y = "Lagged Index (scaled)", fill = "Country") +
   theme_classic()
 ggplot
 
@@ -736,14 +650,4 @@ plot(st_geometry(Croatia_aqua_cropped))
 
 #Save the cropped data to a shapefile
 #st_write(Croatia_aqua_cropped, "Croatia_aqueduct_data.shp", delete_layer = TRUE)
-
-# Simplify the geometries to remove tiny, complex shapes
-Croatia_aqua_cropped <- st_simplify(Croatia_aqua_cropped, dTolerance = 0.01)  # Adjust tolerance as needed
-
-# Plot simplified geometries
-plot(st_geometry(Croatia_aqua_cropped))
-
-# VANNO TOLTE LE CURVE FASTIDIOSE
-
-
 
