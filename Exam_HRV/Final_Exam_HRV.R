@@ -32,6 +32,10 @@ library(raster)
 library(exactextractr)
 library(spdep)
 library(spatialreg)
+library(conflicted)
+conflict_prefer("extract", "terra")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
 
 # ----------------------------- Final Exam Structure ------------------------- #
 
@@ -45,9 +49,7 @@ library(spatialreg)
 # Second not mandatory task
 # Third not mandatory task
 
-library(conflicted)
-conflict_prefer("extract", "terra")
-conflict_prefer("filter", "dplyr")
+
 # -------------------------------- Section B: -------------------------------- #
 
 # ******************************** Mandatory Tasks *************************** #
@@ -172,34 +174,10 @@ print(r.pre_mean_annual)
 
 names(r.pre_mean_annual)
 names(r.pre_mean_annual) <- unique(format(time_vals[indices], "%Y"))
-plot(r.pre_mean_annual[[as.character(2019)]])
-
 #Crop the SPEI data around the boundary box of Croatia
 cropped_pre <- crop(r.pre_mean_annual, bbox_HRV)
 plot(cropped_pre)
 
-#----
-#Extract SPEI data for each polygon in 'shp' keeping all considered years(2015-20)
-spei_Croatia_all_years <- exact_extract(reduced_spei, shp, 'mean')
-spei_Croatia_all_years
-#Extract SPEI data for each polygon in 'shp3' keeping all considered years(2015-20)
-spei_nuts3_all_years <- exact_extract(reduced_spei, shp3, 'mean')
-spei_nuts3_all_years
-#Average SPEI level in Croatia in 2015 (corresponding to the first layer):0.08480766
-spei_Croatia_all_years[[1]]  
-
-#Average SPEI level in Croatia in 2020 (corresponding to the sixth layer):0.3083895
-spei_Croatia_all_years[[6]]  
-
-#Average SPEI level in Croatia regions (NUTS3) in 2015 (0.0850251) & 2020 (0.3005431)
-spei_2015_nuts3 <- spei_nuts3_all_years[[1]]
-avg_spei_2015_nuts3 <- mean(spei_2015_nuts3, na.rm = TRUE)
-avg_spei_2015_nuts3
-spei_2020_nuts3 <- spei_nuts3_all_years[[6]]
-avg_spei_2020_nuts3 <- mean(spei_2020_nuts3, na.rm = TRUE)
-avg_spei_2020_nuts3
-
-#----
 
 ##################################  Task 6  ####################################
 
@@ -236,8 +214,6 @@ aqueduct_shapefile$water_stress_2020 <- water_stress_ts[, 5] # Values for 2020
 
 ##################################  Task 8  ####################################
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!   NOT FINISHED    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 # Definire il bounding box e la lista anni
 bbox_extent <- ext(vect(box_sf))
 years <- 2015:2020
@@ -245,7 +221,7 @@ rasters <- list()
 
 # Loop per creare e rasterizzare ogni anno
 for (year in years) {
-  raster <- rast(bbox_extent, ncol = 1000, nrow = 1000)
+  raster <- rast(bbox_extent, ncol = 250, nrow = 250)
   field_name <- paste0("water_stress_", year)
   raster <- rasterize(vect(aqueduct_shapefile), raster, field = field_name)
   
@@ -366,90 +342,6 @@ for (i in seq_along(years)) {
 }
 par(mfrow = c(1, 1))
 
-#----
-## Step 1: calculate the average pop.density in Croatia.
-pop_density_Croatia <- exact_extract(resampled_pop, shp, 'mean')
-pop_density_Croatia
-# Calculate the average population density for Croatia
-avg_pop_density_Croatia <- mean(pop_density_Croatia, na.rm = TRUE)
-avg_pop_density_Croatia
-## Step 2: Create the ratio for each grid point
-## pop.density in point i / average pop.density in Croatia
-
-# Create the ratio by dividing the resampled population density raster by the average population density
-pop_density_ratio <- resampled_pop / avg_pop_density_Croatia
-pop_density_ratio
-# Check the result by printing or plotting the ratio
-print(pop_density_ratio)
-plot(pop_density_ratio, main = "Population Density Ratio (Grid Point / Avg Pop Density in Croatia)")
-
-## Step 3: Multiply the SPEI value in 2015 by the population density ratio
-
-# Multiply the SPEI value in 2015 by the population density ratio
-pop_weighted_spei_2015 <- reduced_spei[[1]] * pop_density_ratio
-
-# Check the result by printing or plotting the population-weighted SPEI for 2015
-print(pop_weighted_spei_2015)
-plot(pop_weighted_spei_2015, main = "Population-weighted SPEI for 2015")
-
-##Step 4: Multiply the SPEI value in 2016 by the population density ratio
-# SPEI value in 2016 is in reduced_spei[[2]]
-
-# Multiply the SPEI value in 2016 by the population density ratio
-pop_weighted_spei_2016 <- reduced_spei[[2]] * pop_density_ratio
-
-# Check the result by printing or plotting the population-weighted SPEI for 2016
-print(pop_weighted_spei_2016)
-plot(pop_weighted_spei_2016, main = "Population-weighted SPEI for 2016")
-
-##Step 5: Multiply the SPEI values for the remaining years (2017-2020) by the population density ratio
-
-# SPEI for 2017
-pop_weighted_spei_2017 <- reduced_spei[[3]] * pop_density_ratio
-plot(pop_weighted_spei_2017, main = "Population-weighted SPEI for 2017")
-
-# SPEI for 2018
-pop_weighted_spei_2018 <- reduced_spei[[4]] * pop_density_ratio
-plot(pop_weighted_spei_2018, main = "Population-weighted SPEI for 2018")
-
-# SPEI for 2019
-pop_weighted_spei_2019 <- reduced_spei[[5]] * pop_density_ratio
-plot(pop_weighted_spei_2019, main = "Population-weighted SPEI for 2019")
-
-# SPEI for 2020
-pop_weighted_spei_2020 <- reduced_spei[[6]] * pop_density_ratio
-plot(pop_weighted_spei_2020, main = "Population-weighted SPEI for 2020")
-
-##Step 6: Resample the population density ratio raster to match the water stress raster's resolution and extent
-pop_density_ratio_resampled <- resample(pop_density_ratio, raster_2015, method = "bilinear")
-
-# Now, you can perform the population-weighted calculations for water stress
-# Water stress for 2015
-pop_weighted_water_stress_2015 <- raster_2015 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2015, main = "Population-weighted Water Stress for 2015")
-
-# Water stress for 2016
-pop_weighted_water_stress_2016 <- raster_2016 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2016, main = "Population-weighted Water Stress for 2016")
-
-# Water stress for 2017
-pop_weighted_water_stress_2017 <- raster_2017 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2017, main = "Population-weighted Water Stress for 2017")
-
-# Water stress for 2018
-pop_weighted_water_stress_2018 <- raster_2018 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2018, main = "Population-weighted Water Stress for 2018")
-
-# Water stress for 2019
-pop_weighted_water_stress_2019 <- raster_2019 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2019, main = "Population-weighted Water Stress for 2019")
-
-# Water stress for 2020
-pop_weighted_water_stress_2020 <- raster_2020 * pop_density_ratio_resampled
-plot(pop_weighted_water_stress_2020, main = "Population-weighted Water Stress for 2020")
-
-#----
-
 
 ##################################  Task 10  ###################################
 
@@ -474,155 +366,213 @@ Hours_worked_path <- "data/Urban_data/Hours_Worked.csv"
 Croatian_Hours_worked <- read_csv(Hours_worked_path, show_col_types = FALSE)
 Croatian_Hours_worked <- Croatian_Hours_worked %>%
   filter(SECTOR == "F") %>%
-  dplyr::select(TERRITORY_ID, SECTOR, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
-  rename(NUTS_ID = TERRITORY_ID)
-
+  select(TERRITORY_ID, SECTOR, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
+  rename(NUTS_ID = TERRITORY_ID) %>%
+  rename_with(~ paste0("HW_", .), starts_with("20"))
 
 #Load Croatian gva sector a data (Sheet 2)
 Croatiangva_path <- "data/Urban_data/ARDECO_SUVGZ.csv"
 Croatian_GVA <- read_csv(Croatiangva_path,show_col_types = FALSE)
 Croatian_GVA <- Croatian_GVA %>%
-  as_tibble() %>% 
-  filter(SECTOR == "F") %>%
-  dplyr::select(TERRITORY_ID, SECTOR, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
-  rename(NUTS_ID = TERRITORY_ID)
+  select(TERRITORY_ID, `2015`, `2016`, `2017`, `2018`, `2019`, `2020`) %>%
+  rename(NUTS_ID = TERRITORY_ID)%>%
+  rename_with(~ paste0("agr_gva_", .), starts_with("20"))
 
 #Merge shp3 and Croatian_GVA
-shp3_gva_merged = shp3 %>%
-  left_join(Croatian_GVA, by = "NUTS_ID") %>%
-  left_join(Croatian_Hours_worked, by = "NUTS_ID")
+shp3_merged = shp3 %>%
+  left_join(Croatian_Hours_worked, by = "NUTS_ID") %>%
+  left_join(Croatian_GVA, by = "NUTS_ID")
 
-#############
-# POINT 13  #
-#############
+shp3_merged = shp3_merged[!duplicated(shp3_merged$NUTS_ID), ]
 
-#Extract the average value of SPEI for each NUTS in each year
-spei_avg_nuts3 <- shp3 %>%
-  mutate(
-    spei_2015 = exact_extract(pop_weighted_spei_2015, shp3, 'mean'),
-    spei_2016 = exact_extract(pop_weighted_spei_2016, shp3, 'mean'),
-    spei_2017 = exact_extract(pop_weighted_spei_2017, shp3, 'mean'),
-    spei_2018 = exact_extract(pop_weighted_spei_2018, shp3, 'mean'),
-    spei_2019 = exact_extract(pop_weighted_spei_2019, shp3, 'mean'),
-    spei_2020 = exact_extract(pop_weighted_spei_2020, shp3, 'mean')
-  )
 
-#Extract the average water stress for each NUTS in each year
-water_stress_avg_nuts3 <- spei_avg_nuts3 %>%
-  mutate(
-    water_stress_2015 = exact_extract(pop_weighted_water_stress_2015, shp3, 'mean'),
-    water_stress_2016 = exact_extract(pop_weighted_water_stress_2016, shp3, 'mean'),
-    water_stress_2017 = exact_extract(pop_weighted_water_stress_2017, shp3, 'mean'),
-    water_stress_2018 = exact_extract(pop_weighted_water_stress_2018, shp3, 'mean'),
-    water_stress_2019 = exact_extract(pop_weighted_water_stress_2019, shp3, 'mean'),
-    water_stress_2020 = exact_extract(pop_weighted_water_stress_2020, shp3, 'mean')
-  )
+##################################  Task 13  ###################################
 
-#Merge with Croatian_GVA_filtered
-final_sf <- water_stress_avg_nuts3 %>%
-  left_join(Croatian_GVA, by = "NUTS_ID") %>%
-  rename_with(.cols = starts_with("20"), .fn = ~ paste0("agr_gva_", .x))
 
-#############
-# POINT 14  #
-#############
+# Generate a new simple feature object called “final_sf” whose features are the 
+# Serbian NUTS 3 polygons and whose fields are the average values of SPEI,
+# water stress, and Construction  GVA in each considered year. 
 
-# Calculate the averages for each year 
-spei_averages <- final_sf %>%
-  summarize(across(starts_with("spei_"), mean, na.rm = TRUE))
-spei_averages
-water_stress_averages <- final_sf %>%
-  summarize(across(starts_with("water_stress_"), mean, na.rm = TRUE))
-water_stress_averages
-spei_averages = st_drop_geometry(spei_averages)
-water_stress_averages = st_drop_geometry(water_stress_averages)
+# Extraxt spei data from "shp": just Serbia
+extracted_spei_shp <- extract(reduced_spei, shp, fun=mean, na.rm=TRUE)
+# Extraxt spei data from "shp3": all regions in Serbia
+extracted_spei_shp3 <- extract(reduced_spei, shp3, fun=mean, na.rm=TRUE)
 
-#Combine averages into a single data frame
-averages_df <- data.frame(
-  Year = 2015:2020,
-  SPEI = as.numeric(spei_averages),
-  Water_Stress = as.numeric(water_stress_averages)
-)
-averages_df
+final_sf <- shp3_merged %>%
+  select(NUTS_ID, agr_gva_2015,agr_gva_2016,agr_gva_2017,agr_gva_2018,
+         agr_gva_2019, agr_gva_2020,geometry) %>%
+  cbind(extracted_spei_shp3, water_stress_matrix) %>%
+  select(!ID)
 
-#Plot time series for SPEI and water stress
-
-ggplot(averages_df, aes(x = Year)) +
-  geom_line(aes(y = SPEI, color = "SPEI"), size = 1.2) +
-  geom_line(aes(y = Water_Stress, color = "Water Stress"), size = 1.2) +
-  labs(title = "SPEI e Water Stress in Croatia (2015-2020)",
-       x = "Anno",
-       y = "Media") +
-  scale_color_manual("", values = c("SPEI" = "blue", "Water Stress" = "red")) +
-  theme_minimal() +
-  theme(legend.position = "top")
-
-#############
-# POINT 15  #  
-#############
-
-#Convert data in long form
-final_long <- final_sf %>%
-  st_drop_geometry() %>%
-  pivot_longer(
-    cols = starts_with("spei_") | starts_with("water_stress_") | starts_with("agr_gva_"),
-    names_to = c("Indicator", "Year"),
-    names_pattern = "(.*)_(\\d+)",
-    values_to = "Value"
-  ) %>%
-  mutate(Year = as.numeric(Year))
-
-#Filter data for each indicator and plot
-
-#SPEI plot
-ggplot(final_long %>% filter(Indicator == "spei"), aes(x = Year, y = Value, color = NUTS_ID, group = NUTS_ID)) +
-  geom_line(alpha = 0.6) +
-  geom_smooth(aes(group = 1), color = "black", size = 1, method = "loess") +
-  labs(title = "Regional Time Series for SPEI", x = "Year", y = "SPEI") +
-  theme_minimal() +
-  theme(legend.position = "right")
-
-# Water Stress plot
-ggplot(final_long %>% filter(Indicator == "water_stress"), aes(x = Year, y = Value, color = NUTS_ID, group = NUTS_ID)) +
-  geom_line(alpha = 0.8) +
-  geom_smooth(aes(group = 1), color = "black", size = 1, method = "loess") +
-  labs(title = "Regional Time Series for Water Stress", x = "Year", y = "Water Stress") +
-  theme_minimal() +
-  theme(legend.position = "right")
-
-# Agricultural GVA plot
-ggplot(final_long %>% filter(Indicator == "agr_gva"), aes(x = Year, y = Value, color = NUTS_ID, group = NUTS_ID)) +
-  geom_line(alpha = 0.6) +
-  geom_smooth(aes(group = 1), color = "black", size = 1, method = "loess") +
-  labs(title = "Regional Time Series for Agricultural GVA", x = "Year", y = "Agricultural GVA") +
-  theme_minimal() +
-  theme(legend.position = "right")
-
-#############
-# POINT 16  #
-#############
-
-#SPEI growth rate from 2015 to 2020
 final_sf <- final_sf %>%
-  mutate(speigr = (spei_2020 - spei_2015) / spei_2015)
+  rename(
+    SPEI_2015 = spei_1435,
+    SPEI_2016 = spei_1436,
+    SPEI_2017 = spei_1437,
+    SPEI_2018 = spei_1438,
+    SPEI_2019 = spei_1439,
+    SPEI_2020 = spei_1440
+  )
 
-# Plot SPEI growth rate
-ggplot(data = final_sf) +
-  geom_sf(aes(fill = speigr), color = "white", size = 0.1) +
-  scale_fill_gradient2(
-    low = "blue", mid = "green", high = "red", 
-    midpoint = 0, na.value = "grey50", 
-    name = "Growth Rate of SPEI"
-  ) +
-  labs(
-    title = "Growth Rate of SPEI (2015 to 2020) in Croatian NUTS 3 Regions"  ) +
+# compute the avereges for each variable
+final_sf_avg <- final_sf %>%
+  summarise(dplyr::across(where(is.numeric), mean, na.rm = TRUE))
+
+
+##################################  Task 14  ###################################
+
+# Plot the time series of SPEI and water stress in Serbia from 2015 to 2020.
+
+# Reshape in long form the dataset
+final_SPEI_sf_long_avg <- final_sf_avg %>%
+  pivot_longer(cols = starts_with("SPEI_"), 
+               names_to = "year",             
+               values_to = "spei")  
+
+# Remove "SPEI_"from the year name and leave just the number
+final_SPEI_sf_long_avg <- final_SPEI_sf_long_avg %>%
+  mutate(year = as.numeric(gsub("SPEI_", "", year)))
+
+# generate the graph for the time series of SPEI from 2015 to 2020
+SPEI_avg_time_series <- ggplot(final_SPEI_sf_long_avg, aes(x = year, y = spei)) +
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +       
+  labs(title = "Time Series of SPEI (2015-2020)",
+       x = "Year",
+       y = "SPEI") +
+  theme_minimal()
+SPEI_avg_time_series
+
+final_water_sf_long_avg <- final_sf_avg %>%
+  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
+         water_stress_2019, water_stress_2020) %>%
+  pivot_longer(cols = starts_with("water_stress"),  
+               names_to = "year",   
+               values_to = "water_stress")
+
+# Remove "water_stress_" from the year name and leave just the number
+final_water_sf_long_avg <- final_water_sf_long_avg %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+
+# generate the graph for the time series of water stress from 2015 to 2020
+water_avg_time_series <- ggplot(final_water_sf_long_avg, aes(x = year, y = water_stress)) +
+  geom_line(color = "blue") +  
+  geom_point(color = "red") + 
+  labs(title = "Time Series of water stress (2015-2020)",
+       x = "Year",
+       y = "water stress") +
+  theme_minimal()
+water_avg_time_series
+
+# merge the two datasets
+final_combined_long_avg <- final_SPEI_sf_long_avg %>%
+  select(year, spei) %>%
+  rename(value = spei) %>%
+  mutate(variable = "SPEI") %>%
+  bind_rows(
+    final_water_sf_long_avg %>%
+      select(year, water_stress) %>%
+      rename(value = water_stress) %>%
+      mutate(variable = "Water Stress")
+  )
+
+# Generate a combined plot
+ggplot(final_combined_long_avg, aes(x = year, y = value, color = variable)) +
+  geom_line() +     
+  geom_point() +      
+  labs(title = "Time Series of SPEI and Water Stress (2015-2020)",
+       x = "Year",
+       y = "Value") +
+  theme_minimal()
+
+
+##################################  Task 15  ###################################
+
+# Plot the time series of SPEI, water stress, and Agricultural GVA of each Croatian NUTS 3 region.
+
+# Reshape in long form the dataset without avereging by regiones
+final_SPEI_sf_long <- final_sf %>%
+  select(SPEI_2015, SPEI_2016, SPEI_2017, SPEI_2018, 
+         SPEI_2019, SPEI_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("SPEI_"), 
+               names_to = "year",           
+               values_to = "spei") 
+
+# Remove "SPEI_" from the year name and leave just the number
+final_SPEI_sf_long <- final_SPEI_sf_long %>%
+  mutate(year = as.numeric(gsub("SPEI_", "", year)))
+
+final_water_sf_long <- final_sf %>%
+  select(water_stress_2015, water_stress_2016, water_stress_2017, water_stress_2018, 
+         water_stress_2019, water_stress_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("water_stress_"),  
+               names_to = "year",   
+               values_to = "water_stress")
+
+# Remove "water_stress_" from the year name and leave just the number
+final_water_sf_long <- final_water_sf_long %>%
+  mutate(year = as.numeric(gsub("water_stress_", "", year)))
+
+final_agr_sf_long <- final_sf %>%
+  select(agr_gva_2015, agr_gva_2016, agr_gva_2017, agr_gva_2018, 
+         agr_gva_2019, agr_gva_2020, NUTS_ID) %>%
+  pivot_longer(cols = starts_with("agr_gva_"),
+               names_to = "year",
+               values_to = "agr_gva")
+
+# Remove "agr_gva_" from the year name and leave just the number
+final_agr_sf_long <- final_agr_sf_long %>%
+  mutate(year = as.numeric(gsub("agr_gva_", "", year)))
+
+# Merge the two datasets while preserving NUTS_ID
+final_combined_long <- final_SPEI_sf_long %>%
+  select(NUTS_ID, year, spei) %>% 
+  rename(value = spei) %>%
+  mutate(variable = "SPEI") %>%
+  bind_rows(
+    final_water_sf_long %>%
+      select(NUTS_ID, year, water_stress) %>% 
+      rename(value = water_stress) %>%
+      mutate(variable = "water stress")) %>%
+  bind_rows(
+    final_agr_sf_long %>%
+      select(NUTS_ID, year, agr_gva) %>%
+      rename(value = agr_gva) %>%
+      mutate(variable = "agr_gva")) %>%
+  arrange(NUTS_ID)
+
+# Generate a combined plot
+ggplot(final_combined_long, aes(x = year, y = value, color = variable)) +
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~ NUTS_ID, scales = "free_y") + 
+  labs(title = "Grafici per NUTS_ID",
+       x = "Year",
+       y = "Value") +
   theme_minimal() +
-  theme(legend.position = "bottom") +
-  coord_sf(crs = 4326)
+  theme(legend.position = "bottom")
 
-#############
-# POINT 17  #
-#############
+# SPEI and water stress overlaps
+
+##################################  Task 16  ###################################
+
+# Plot a map showing the growth rate of SPEI from 2015 to 2020 of each Serbian
+# NUTS 3 region, in CRS 4326. 
+
+final_sf <- final_sf %>%
+  mutate(speigr = (SPEI_2020 - SPEI_2015) / SPEI_2015 * 100) 
+
+ggplot(data = final_sf) +
+  geom_sf(aes(fill = speigr), color = "black") +  
+  scale_fill_viridis_c(option = "magma", name = "SPEI Growth Rate (%)") + 
+  labs(title = "Growth Rate of SPEI from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+
+# Plot a map showing the growth rate of Water stess from 2015 to 2020 of each Serbian
+# NUTS 3 region, in CRS 4326. 
 
 final_sf <- final_sf %>%
   mutate(wsgr = (water_stress_2020 - water_stress_2015) / water_stress_2015)
@@ -641,115 +591,123 @@ ggplot(data = final_sf) +
   theme(legend.position = "bottom") +
   coord_sf(crs = 32634)
 
-#############
-# POINT 18  #
-#############
+##################################  Task 17  ###################################
+# BISOGNA METTERE IL PRECIPITATION INDEX
 
-final_sf <- final_sf %>%
-  mutate(agrgvagr = (agr_gva_2020 - agr_gva_2015) / agr_gva_2015)
 
-#Plot agricultural GVA growth rate
-ggplot(data = final_sf) +
-  geom_sf(aes(fill = wsgr), color = "white", size = 0.1) +
-  scale_fill_gradient2(
-    low = "blue", mid = "green", high = "red", 
-    midpoint = 0, na.value = "grey50", 
-    name = "Growth Rate of agricultural GVA"
-  ) +
-  labs(
-    title = "Growth Rate of agricultural GVA (2015 to 2020) in Croatian NUTS 3 Regions"  ) +
+##################################  Task 18  ###################################
+
+# Plot a map showing the growth rate of Agricultural GVA from 2015 to 2020 of each Serbian NUTS 3
+# region, in CRS 3035. 
+
+final_sf_3035 <- final_sf %>%
+  st_transform(crs = 3035) %>%  # Imposta il CRS a 3035
+  mutate(agrgvagr = ( agr_gva_2020 - agr_gva_2015) / agr_gva_2015 * 100) 
+
+ggplot(data = final_sf_3035) +
+  geom_sf(aes(fill = agrgvagr), color = "black") +  
+  scale_fill_viridis_c(option = "viridis", name = "Agricultural GVA Growth Rate (%)") + 
+  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
   theme_minimal() +
-  theme(legend.position = "bottom") +
-  coord_sf(crs = 3035)
+  theme(legend.position = "right")
 
-# Plot agricultural GVA growth rate with color distinctions for different values of growth rates
-ggplot(data = final_sf) +
-  geom_sf(aes(fill = cut(agrgvagr, breaks = c(-Inf, 0, 0.05, Inf), labels = c("Negative Growth", "0-5% Growth", ">5% Growth"))),
-          color = "white", size = 0.1) +
-  scale_fill_manual(
-    values = c("Negative Growth" = "blue", "0-5% Growth" = "lightblue", ">5% Growth" = "white"),
-    name = "Growth Rate of Agricultural GVA"
-  ) +
-  labs(
-    title = "Agricultural GVA Growth Rate (2015-2020) in Croatian NUTS 3 Regions",
-  ) +
+#  plot the map again using blue for regions experiencing a negative growth, lightblue
+#  for those having a growth rate between 0% and 5%, and white for regions with a growth rate >5%.
+
+# divide growth rates in cathegories
+final_sf_3035 <- final_sf_3035 %>%
+  mutate(agrvagr_category = case_when(
+    agrgvagr < 0 ~ "Negative Growth",
+    agrgvagr >= 0 & agrgvagr <= 5 ~ "0-5% Growth",
+    agrgvagr > 5 ~ ">5% Growth"
+  ))
+
+# generate the same grapth with the bin colours setted above
+ggplot(data = final_sf_3035) +
+  geom_sf(aes(fill = agrvagr_category), color = "black") +  # Colora in base alla categoria
+  scale_fill_manual(values = c("Negative Growth" = "blue", 
+                               "0-5% Growth" = "lightblue", 
+                               ">5% Growth" = "white"),
+                    name = "Agricultural GVA Growth Rate") +
+  labs(title = "Growth Rate of Agricultural GVA from 2015 to 2020 in Serbian NUTS 3 Regions",
+       subtitle = "Percentage Growth Rate") +
   theme_minimal() +
-  theme(legend.position = "bottom") +
-  coord_sf(crs = 3035)
-
-#############
-# POINT 19  #
-#############
+  theme(legend.position = "right")  
 
 
-#################
-# NON MANDATORY #
-#################
+##################################  Task 19  ###################################
 
-#Ensure `final_sf` is in the correct CRS
+# Yes, it could be affected by neighbors country investment and a way to check it is through 
+# spatial autocorrelation tests such as Moran I test and generally speaking 
+# apply a spatial econometric approach that accounts for potential spatial dependencies over time. 
+
+
+# -------------------------------- Section B: ----------------------------------
+
+# ******************************** Second Not Mandatory Tasks *******************
+
+# Using the “queen” criterion
+
+# compute the Moran’s I Test for SPEI in 2015, and for Agricultural GVA in 2015
+
+final_sf <- st_make_valid(final_sf) # Useful to correct geometries!
 final_sf <- st_transform(final_sf, crs = 4326)
 
-#Create a spatial weights matrix using the queen criterion
-queen_weights <- poly2nb(final_sf, queen = TRUE)
-queen_listw <- nb2listw(queen_weights, style = "W")
+# Spatial Lags
+k <- poly2nb(final_sf, row.names = final_sf$NUTS_ID)# liste di vicinanza tra ogni poligono
+k_weights <- nb2listw(k, style = "W") # does not work. Why? some island
 
-#SPEI 2015 Moran's I Test: null rejected
-spei_moran <- moran.test(final_sf$spei_2015, queen_listw)
-print(spei_moran)
+print(summary(k))
 
-#Agricultural GVA 2015 Moran's I Test: null rejected
-agrgva_moran <- moran.test(final_sf$agr_gva_2015, queen_listw)
-print(agrgva_moran)
+# create centroids
+coords <- st_coordinates(st_centroid(st_geometry(final_sf))) 
+p <- plot(k, coords)
 
-#Calculate the spatial lag for each variable
+# create Spatial Lags variable
+index_lag <- lag.listw(k_weights, final_sf$agr_gva_2015)
+
+
+# Is population spatially correlated across Europe?
+
+# Moran's I Test
+moran1_agr2015 <- moran.test(final_sf$agr_gva_2015,k_weights)
+print(moran1_agr2015) #statistically significant with a practical value of 0.58 of autocorrelation
+
+
+# create a spatial autocorrelation scatterplot for the above-mentioned variables
+
+# Precompute scaled values
 final_sf <- final_sf %>%
-  mutate(
-    spei_2015_lag = lag.listw(queen_listw, spei_2015),
-    agrgva_2015_lag = lag.listw(queen_listw, agr_gva_2015)
-  )
+  mutate(agr_gva_2015_scaled = scale(agr_gva_2015),
+         index_lag_scaled = scale(index_lag))
 
-#Standardize values for plotting
-final_sf <- final_sf %>%
-  mutate(
-    spei_2015_scaled = scale(spei_2015),
-    spei_2015_lag_scaled = scale(spei_2015_lag),
-    agrgva_2015_scaled = scale(agr_gva_2015),
-    agrgva_2015_lag_scaled = scale(agrgva_2015_lag)
-  )
+# Compute mean values for horizontal and vertical lines
+mean_agr_gva_2015_scaled <- mean(final_sf$agr_gva_2015_scaled, na.rm = TRUE)
+mean_index_lag_scaled <- mean(final_sf$index_lag_scaled, na.rm = TRUE)
 
-#Moran scatterplot for SPEI 2015
-ggplot(final_sf) +
-  geom_point(aes(x = spei_2015_scaled, y = spei_2015_lag_scaled), color = "blue") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  geom_smooth(aes(x = spei_2015_scaled, y = spei_2015_lag_scaled), method = "lm", color = "black") +
-  labs(
-    x = "SPEI 2015 (standardized)",
-    y = "Spatial Lag of SPEI 2015 (standardized)",
-    title = "Moran's I Scatterplot for SPEI 2015"
-  ) +
-  theme_minimal()
+# Create the plot
+ggplot <- ggplot(final_sf) +
+  geom_point(aes(x = agr_gva_2015_scaled, y = index_lag_scaled, fill = NUTS_ID), shape = 22, size = 3, alpha = 0.8) +
+  geom_hline(yintercept = mean_index_lag_scaled, linetype = "dashed") +
+  geom_vline(xintercept = mean_agr_gva_2015_scaled, linetype = "dashed") +
+  geom_smooth(aes(x = agr_gva_2015_scaled, y = index_lag_scaled), method = "lm", color = "black") +
+  labs(x = "agr_gva_2015 (scaled)", y = "Lagged Index (scaled)", fill = "Country") +
+  theme_classic()
+ggplot
 
-# Moran scatterplot for Agricultural GVA 2015
-ggplot(final_sf) +
-  geom_point(aes(x = agrgva_2015_scaled, y = agrgva_2015_lag_scaled), color = "green") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  geom_smooth(aes(x = agrgva_2015_scaled, y = agrgva_2015_lag_scaled), method = "lm", color = "black") +
-  labs(
-    x = "Agricultural GVA 2015 (standardized)",
-    y = "Spatial Lag of Agricultural GVA 2015 (standardized)",
-    title = "Moran's I Scatterplot for Agricultural GVA 2015"
-  ) +
-  theme_minimal()
+# Moran’s I doesn’t directly test the causal impact of a lagged variable in neighboring regions .
+# To explore the effect of lagged investment in neighboring regions on GDP, a spatial lag model (SLM) 
+# or a spatial Durbin model (SDM) would be more appropriate. These models incorporate
+# spatially lagged independent variables, allowing for analysis of the potential 
+# impact of investment at t−1 in region j on GDP at t in region i.
 
+# -------------------------------- Section B: ----------------------------------
 
-#################
-# NON MANDATORY #
-#################
+# ******************************** Third Not Mandatory Task: *******************
 
 #Load the .gdb file
-gdb_path <- "data/aqueduct-4-0-water-risk-data/GDB/Aq40_Y2023D07M05.gdb"
+gdb_path <- "data/Aqueduct40_waterrisk_download_Y2023M07D05/GDB/Aq40_Y2023D07M05.gdb"
 
 #List layers in the GDB file
 gdb_layers <- st_layers(gdb_path)
@@ -761,15 +719,17 @@ aqua_sf <- st_read(gdb_path, layer = "baseline_annual")
 
 #Filter the data for Croatia using 'gid_0' column (assuming Croatia is labeled as "SRB" in 'gid_0')
 Croatia_aqua_sf <- aqua_sf %>%
-  filter(gid_0 == "SRB")  # Adjust "SRB" if Croatia has a different code in the dataset
+  filter(gid_0 == "HRV")  # Adjust "SRB" if Croatia has a different code in the dataset
 
 #Remove any rows with missing data to reduce computational burden
 Croatia_aqua_sf <- Croatia_aqua_sf %>%
   drop_na()
 
-
-
 #Crop the Aqueduct data to Croatia's NUTS 3 shapefile shp3
+Croatia_aqua_sf <- st_make_valid(Croatia_aqua_sf)
+shp3 <- st_make_valid(shp3)
+
+# Now perform the intersection
 Croatia_aqua_cropped <- st_intersection(Croatia_aqua_sf, shp3)
 #Plot data
 plot(st_geometry(Croatia_aqua_cropped))
@@ -777,8 +737,13 @@ plot(st_geometry(Croatia_aqua_cropped))
 #Save the cropped data to a shapefile
 #st_write(Croatia_aqua_cropped, "Croatia_aqueduct_data.shp", delete_layer = TRUE)
 
+# Simplify the geometries to remove tiny, complex shapes
+Croatia_aqua_cropped <- st_simplify(Croatia_aqua_cropped, dTolerance = 0.01)  # Adjust tolerance as needed
 
+# Plot simplified geometries
+plot(st_geometry(Croatia_aqua_cropped))
 
+# VANNO TOLTE LE CURVE FASTIDIOSE
 
 
 
