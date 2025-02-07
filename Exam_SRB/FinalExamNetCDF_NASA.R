@@ -1,6 +1,6 @@
 # Commands to set the directory:
 getwd()
-path <- "C:/Users/Davide/Desktop/Alma Mater/SECOND YEAR/GIS/Exam"
+path <- "C:/Users/david/Desktop/University/GIS/Exam_SRB"
 setwd(path)
 
 # libraries
@@ -11,7 +11,6 @@ library(readxl)
 
 # Spatial Data Handling and Manipulation
 library(sf) # for Vector Data
-library(sfnetworks)
 library(nngeo)
 library(spData)
 library(terra) # for Raster Data
